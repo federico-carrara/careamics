@@ -13,13 +13,13 @@ from torchmetrics.image import MultiScaleStructuralSimilarityIndexMeasure
 # TODO: does this add additional dependency? 
 
 
-def psnr(gt: np.ndarray, pred: np.ndarray, range: float = 255.0) -> float:
-    """
-    Peak Signal to Noise Ratio.
-
-    This method calls skimage.metrics.peak_signal_noise_ratio. See:
-    https://scikit-image.org/docs/dev/api/skimage.metrics.html.
-
+def _internal_psnr(
+    gt: np.ndarray,
+    pred: np.ndarray,
+    data_range: Optional[np.ndarray] = None
+) -> float:
+    """Compute the PSNR for a given ground-truth/prediction pair.
+    
     Parameters
     ----------
     gt : NumPy array
@@ -27,14 +27,51 @@ def psnr(gt: np.ndarray, pred: np.ndarray, range: float = 255.0) -> float:
     pred : NumPy array
         Predicted image.
     range : float, optional
-        The images pixel range, by default 255.0.
+        The images pixel range, by default `None`.
+        
+    Returns
+    -------
+    float
+        PSNR value.
+    """
+    if data_range is None:
+        data_range = gt.max() - gt.min()
+    mse = ((gt - pred) ** 2).mean()
+    return 10 * np.log10(data_range ** 2 / mse)
+
+def psnr(
+    gt: np.ndarray, 
+    pred: np.ndarray, 
+    range_: Optional[float] = None,
+    psnr_fn: Callable = _internal_psnr
+) -> float:
+    """
+    Peak Signal to Noise Ratio.
+
+    This method calls skimage.metrics.peak_signal_noise_ratio. See:
+    https://scikit-image.org/docs/dev/api/skimage.metrics.html.
+
+    NOTE: if `range_` is `None`, the `skimage` psnr function will try to infer it
+    from the data type. This can lead to unexpected results.
+    # TODO: keep the `skimage` implementation?
+    
+    Parameters
+    ----------
+    gt : NumPy array
+        Ground truth image.
+    pred : NumPy array
+        Predicted image.
+    range_ : float, optional
+        The images pixel range, by default `None`.
+    psnr_fn : Callable, optional
+        PSNR function to use, by default `_internal_psnr`.
 
     Returns
     -------
     float
         PSNR value.
     """
-    return peak_signal_noise_ratio(gt, pred, data_range=range)
+    return psnr_fn(gt, pred, data_range=range_)
 
 
 def _zero_mean(x: np.ndarray) -> np.ndarray:
