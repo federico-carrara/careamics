@@ -5,27 +5,26 @@ from pathlib import Path
 from typing import Literal, Optional, Union
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator, PlainSerializer
+import torch
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    model_validator,
+)
 from typing_extensions import Annotated, Self
 
+from careamics.utils.serializers import array_to_json, list_to_numpy
 
-def array_to_json(v: np.ndarray) -> str:
-    """Convert an array to a list and then to a JSON string.
-    
-    Parameters
-    ----------
-    v : np.ndarray
-        Array to be serialized.
-    
-    Returns
-    -------
-    str
-        JSON string representing the array.
-    """
-    return json.dumps(v.tolist())
-
-Array = Annotated[np.ndarray, PlainSerializer(array_to_json, return_type=str)]
-"""Annotated float type, used to serialize numpy arrays to JSON strings."""
+Array = Annotated[
+    Union[np.ndarray, torch.Tensor],
+    PlainSerializer(array_to_json, return_type=str),
+    PlainValidator(list_to_numpy),
+]
+"""Annotated array type, used to serialize arrays or tensors to JSON strings
+and deserialize them back to arrays."""
 
 
 # TODO: add histogram-based noise model
@@ -47,12 +46,14 @@ class GaussianMixtureNMConfig(BaseModel):
     """Path to the directory where the trained noise model (*.npz) is saved in the
     `train` method."""
 
-    # TODO remove and use as parameters to the NM functions? 
+    # TODO remove and use as parameters to the NM functions?
     signal: Optional[Union[str, Path, np.ndarray]] = Field(default=None, exclude=True)
     """Path to the file containing signal or respective numpy array."""
 
     # TODO remove and use as parameters to the NM functions?
-    observation: Optional[Union[str, Path, np.ndarray]] = Field(default=None, exclude=True)
+    observation: Optional[Union[str, Path, np.ndarray]] = Field(
+        default=None, exclude=True
+    )
     """Path to the file containing observation or respective numpy array."""
 
     weight: Optional[Array] = None
@@ -61,11 +62,7 @@ class GaussianMixtureNMConfig(BaseModel):
     parameter of each gaussian, namely [mean, standard deviation and weight].
     Specifically, rows are organized as follows:
     - first n_gaussian rows correspond to the means
-    - next n_gaussian rows correspond to the weights
-    - last n_gaussian rows correspond to the standard deviations
-    If `weight=None`, the weight array is initialized using the `min_signal`
     and `max_signal` parameters."""
-
     n_gaussian: int = Field(default=1, ge=1)
     """Number of gaussians used for the GMM."""
 
@@ -74,13 +71,9 @@ class GaussianMixtureNMConfig(BaseModel):
     parameters and the signal. 2 implies a linear relationship, 3 implies a quadratic
     relationship and so on."""
 
-    min_signal: float = Field(default=0.0, ge=0.0)
-    """Minimum signal intensity expected in the image."""
-
     max_signal: float = Field(default=1.0, ge=0.0)
     """Maximum signal intensity expected in the image."""
 
-    min_sigma: float = Field(default=200.0, ge=0.0)  # TODO took from nb in pn2v
     """Minimum value of `standard deviation` allowed in the GMM.
     All values of `standard deviation` below this are clamped to this value."""
 
