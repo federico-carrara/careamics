@@ -17,6 +17,7 @@ def create_LVAE_model(
     analytical_kl: bool = False,
     predict_logvar: Union[Literal["pixelwise"], None] = None
 ) -> nn.Module:
+    # TODO: this needs to be refactored using the new noise model
     lvae_model_config = LVAEModel(
         architecture="LVAE",
         conv_dims=2,
