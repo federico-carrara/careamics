@@ -19,8 +19,10 @@ from .utils import (
 )
 
 ConvType = Union[nn.Conv2d, nn.Conv3d]
+ConvTransposeType = Union[nn.ConvTranspose2d, nn.ConvTranspose3d]
 NormType = Union[nn.BatchNorm2d, nn.BatchNorm3d]
 DropoutType = Union[nn.Dropout2d, nn.Dropout3d]
+
 
 class ResidualBlock(nn.Module):
     """
@@ -293,7 +295,7 @@ class ResBlockWithResampling(nn.Module):
         assert mode in ["top-down", "bottom-up"]
         
         conv_layer: ConvType = getattr(nn, f"Conv{conv_dims}d")
-        transp_conv_layer: ConvType = getattr(nn, f"ConvTranspose{conv_dims}d")
+        transp_conv_layer: ConvTransposeType = getattr(nn, f"ConvTranspose{conv_dims}d")
         
         if min_inner_channels is None:
             min_inner_channels = 0
