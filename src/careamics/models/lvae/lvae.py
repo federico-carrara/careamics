@@ -7,7 +7,6 @@ The current implementation is based on "Interpretable Unsupervised Diversity Den
 from collections.abc import Iterable
 from typing import Tuple, Union
 
-# import ml_collections  # TODO: refactor this out
 import numpy as np
 import torch
 import torch.nn as nn
@@ -21,7 +20,6 @@ from .layers import (
     TopDownDeterministicResBlock,
     TopDownLayer,
 )
-from .likelihoods import GaussianLikelihood, NoiseModelLikelihood
 from .utils import Interpolate, ModelType, crop_img_tensor, pad_img_tensor
 
 
@@ -41,7 +39,6 @@ class LadderVAE(nn.Module):
         decoder_dropout: float,
         nonlinearity: str,
         predict_logvar: bool,
-        enable_noise_model: bool,
         analytical_kl: bool,
     ):
         """
@@ -66,7 +63,6 @@ class LadderVAE(nn.Module):
         self.decoder_dropout = decoder_dropout
         self.nonlin = nonlinearity
         self.predict_logvar = predict_logvar
-        self.enable_noise_model = enable_noise_model
         self.analytical_kl = analytical_kl
         # -------------------------------------------------------
         
@@ -96,13 +92,6 @@ class LadderVAE(nn.Module):
         self._var_clip_max = 20
         self._stochastic_use_naive_exponential = False
         self._enable_topdown_normalize_factor = True
-
-        # Noise model attributes -> Hardcoded
-        self.noise_model_type = "gmm"
-        self.denoise_channel = (
-            "input"  # 4 values for denoise_channel {'Ch1', 'Ch2', 'input','all'}
-        )
-        self.noise_model_learnable = False
 
         # Attributes that handle LC -> Hardcoded
         self.enable_multiscale = (
@@ -145,6 +134,17 @@ class LadderVAE(nn.Module):
         self.mixed_rec_w = 0
         self.nbr_consistency_w = 0
 
+        # -------------------------------------------------------
+
+        # -------------------------------------------------------
+        # # Training attributes
+        # # can be used to tile the validation predictions
+        # self._val_idx_manager = val_idx_manager
+        # self._val_frame_creator = None
+        # # initialize the learning rate scheduler params.
+        # self.lr_scheduler_monitor = self.lr_scheduler_mode = None
+        # self._init_lr_scheduler_params(config)
+        # self._global_step = 0
         # -------------------------------------------------------
 
         # -------------------------------------------------------
@@ -213,7 +213,7 @@ class LadderVAE(nn.Module):
         Parameters
         ----------
         init_stride: int
-            The stride used by the intial Conv2d block.
+            The stride used by the initial Conv2d block.
         num_res_blocks: int, optional
             The number of BottomUpDeterministicResBlocks to include in the layer, default is 1.
         """
@@ -411,30 +411,6 @@ class LadderVAE(nn.Module):
             )
         return nn.Sequential(*modules)
 
-    def create_likelihood_module(self):
-        """
-        This method defines the likelihood module for the current LVAE model.
-        The existing likelihood modules are `GaussianLikelihood` and `NoiseModelLikelihood`.
-        """
-        if self.enable_noise_model:
-            raise NotImplementedError("Noise model not implemented yet.")
-            self.likelihood_NM = NoiseModelLikelihood(
-                self.decoder_n_filters,
-                self.target_ch,
-                self.data_mean,
-                self.data_std,
-                self.noiseModel,
-            )
-        else:
-            self.likelihood_gm = GaussianLikelihood(
-                self.decoder_n_filters,
-                self.target_ch,
-                predict_logvar=self.predict_logvar,
-                logvar_lowerbound=self.logvar_lowerbound,
-                conv2d_bias=self.topdown_conv2d_bias,
-            )
-            return self.likelihood_gm
-
     def _init_multires(
         self, config=None
     ) -> nn.ModuleList:  # TODO config: ml_collections.ConfigDict refactor
@@ -519,7 +495,7 @@ class LadderVAE(nn.Module):
         bottom_up_layers: nn.ModuleList,
     ) -> list[torch.Tensor]:
         """
-        This method defines the forward pass throught the LVAE Encoder, the so-called
+        This method defines the forward pass through the LVAE Encoder, the so-called
         Bottom-Up pass.
 
         Parameters
@@ -565,7 +541,7 @@ class LadderVAE(nn.Module):
         final_top_down_layer: Union[nn.Sequential, None] = None,
     ) -> Tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
-        This method defines the forward pass throught the LVAE Decoder, the so-called
+        This method defines the forward pass through the LVAE Decoder, the so-called
         Top-Down pass.
 
         Parameters
@@ -587,10 +563,10 @@ class LadderVAE(nn.Module):
             place in this case).
         top_down_layers: nn.ModuleList, optional
             A list of top-down layers to use in the top-down pass. If `None`, the method uses the
-            default layers defined in the contructor.
+            default layers defined in the constructor.
         final_top_down_layer: nn.Sequential, optional
             The last top-down layer of the top-down pass. If `None`, the method uses the default
-            layers defined in the contructor.
+            layers defined in the constructor.
         """
         if top_down_layers is None:
             top_down_layers = self.top_down_layers

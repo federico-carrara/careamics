@@ -1,3 +1,5 @@
+"""Module containing `FCNAlgorithmConfig` class."""
+
 from pprint import pformat
 from typing import Literal, Union
 
@@ -43,42 +45,16 @@ class FCNAlgorithmConfig(BaseModel):
     Examples
     --------
     Minimum example:
-    >>> from careamics.config import AlgorithmConfig
+    >>> from careamics.config import FCNAlgorithmConfig
     >>> config_dict = {
     ...     "algorithm": "n2v",
+    ...     "algorithm_type": "fcn",
     ...     "loss": "n2v",
     ...     "model": {
     ...         "architecture": "UNet",
     ...     }
     ... }
-    >>> config = AlgorithmConfig(**config_dict)
-
-    Using a custom model:
-    >>> from torch import nn, ones
-    >>> from careamics.config import AlgorithmConfig, register_model
-    ...
-    >>> @register_model(name="linear_model")
-    ... class LinearModel(nn.Module):
-    ...    def __init__(self, in_features, out_features, *args, **kwargs):
-    ...        super().__init__()
-    ...        self.in_features = in_features
-    ...        self.out_features = out_features
-    ...        self.weight = nn.Parameter(ones(in_features, out_features))
-    ...        self.bias = nn.Parameter(ones(out_features))
-    ...    def forward(self, input):
-    ...        return (input @ self.weight) + self.bias
-    ...
-    >>> config_dict = {
-    ...     "algorithm": "custom",
-    ...     "loss": "mse",
-    ...     "model": {
-    ...         "architecture": "Custom",
-    ...         "name": "linear_model",
-    ...         "in_features": 10,
-    ...         "out_features": 5,
-    ...     }
-    ... }
-    >>> config = AlgorithmConfig(**config_dict)
+    >>> config = FCNAlgorithmConfig(**config_dict)
     """
 
     # Pydantic class configuration
@@ -91,15 +67,29 @@ class FCNAlgorithmConfig(BaseModel):
     # Mandatory fields
     # defined in SupportedAlgorithm
     algorithm_type: Literal["fcn"]
-    algorithm: Literal["n2v", "care", "n2n"]
+    """Algorithm type must be `fcn` (fully convolutional network) to differentiate this
+    configuration from LVAE."""
+
+    algorithm: Literal["n2v", "care", "n2n", "custom"]
+    """Name of the algorithm, as defined in SupportedAlgorithm. Use `custom` for custom
+    model architecture."""
+
     loss: Literal["n2v", "mae", "mse"]
+    """Loss function to use, as defined in SupportedLoss."""
+
     model: Union[UNetModel, CustomModel] = Field(discriminator="architecture")
+    """Model architecture to use, along with its parameters. Compatible architectures
+    are defined in SupportedArchitecture, and their Pydantic models in
+    `careamics.config.architectures`."""
+    # TODO supported architectures are now all the architectures but does not warn users
+    # of the compatibility with the algorithm
 
     # Optional fields
     optimizer: OptimizerModel = OptimizerModel()
     """Optimizer to use, defined in SupportedOptimizer."""
 
     lr_scheduler: LrSchedulerModel = LrSchedulerModel()
+    """Learning rate scheduler to use, defined in SupportedLrScheduler."""
 
     @model_validator(mode="after")
     def algorithm_cross_validation(self: Self) -> Self:
@@ -138,6 +128,11 @@ class FCNAlgorithmConfig(BaseModel):
         if self.algorithm == "care" or self.algorithm == "n2n":
             if self.loss == "n2v":
                 raise ValueError("Supervised algorithms do not support loss `n2v`.")
+
+        if (self.algorithm == "custom") != (self.model.architecture == "custom"):
+            raise ValueError(
+                "Algorithm and model architecture must be both `custom` or not."
+            )
 
         return self
 

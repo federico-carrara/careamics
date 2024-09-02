@@ -8,6 +8,7 @@ from typing_extensions import Self
 from .architecture_model import ArchitectureModel
 
 
+# TODO: it is quite confusing to call this LVAEModel, as it is basically a config
 class LVAEModel(ArchitectureModel):
     """LVAE model."""
 
@@ -35,9 +36,6 @@ class LVAEModel(ArchitectureModel):
 
     predict_logvar: Literal[None, "pixelwise"] = None
 
-    enable_noise_model: bool = Field(
-        default=True,
-    )
     analytical_kl: bool = Field(
         default=False,
     )
@@ -147,8 +145,8 @@ class LVAEModel(ArchitectureModel):
         # if self.multiscale_count != 0:
         #     if self.multiscale_count != len(self.z_dims) - 1:
         #         raise ValueError(
-        #             f"Multiscale count must be 0 or equal to the number of Z dimensions"
-        #             f" - 1 (got {self.multiscale_count} and {len(self.z_dims)})."
+        #             f"Multiscale count must be 0 or equal to the number of Z "
+        #             f"dims - 1 (got {self.multiscale_count} and {len(self.z_dims)})."
         #         )
 
         return self
