@@ -6,9 +6,9 @@ This module contains a factory function for creating loss functions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Literal, Optional, Union
 
+from pydantic import BaseModel, ConfigDict, Field
 from torch import Tensor as tensor
 
 from ..config.support import SupportedLoss
@@ -28,9 +28,10 @@ if TYPE_CHECKING:
     NoiseModel = Union[GaussianMixtureNoiseModel, MultiChannelNoiseModel]
 
 
-@dataclass
-class FCNLossParameters:
+class FCNLossParameters(BaseModel):
     """Dataclass for FCN loss."""
+
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True)
 
     # TODO check
     prediction: tensor
@@ -40,16 +41,21 @@ class FCNLossParameters:
     loss_weight: float
 
 
-@dataclass  # TODO why not pydantic?
-class LVAELossParameters:
+class LVAELossParameters(BaseModel):
     """Dataclass for LVAE loss."""
 
     # TODO: refactor in more modular blocks (otherwise it gets messy very easily)
     # e.g., - weights, - kl_params, ...
 
-    noise_model_likelihood: Optional[NoiseModelLikelihood] = None
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True)
+
+    noise_model_likelihood: Optional[NoiseModelLikelihood] = Field(
+        default=None, exclude=True
+    )
     """Noise model likelihood instance."""
-    gaussian_likelihood: Optional[GaussianLikelihood] = None
+    gaussian_likelihood: Optional[GaussianLikelihood] = Field(
+        default=None, exclude=True
+    )
     """Gaussian likelihood instance."""
     current_epoch: int = 0
     """Current epoch in the training loop."""
