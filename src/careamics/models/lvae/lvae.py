@@ -107,19 +107,6 @@ class LadderVAE(nn.Module):
 
         # Derived attributes
         self.n_layers = len(self.z_dims)
-
-        # Others...
-        self._tethered_to_input = False
-        self._tethered_ch1_scalar = self._tethered_ch2_scalar = None
-        if self._tethered_to_input:
-            target_ch = 1
-            requires_grad = False
-            self._tethered_ch1_scalar = nn.Parameter(
-                torch.ones(1) * 0.5, requires_grad=requires_grad
-            )
-            self._tethered_ch2_scalar = nn.Parameter(
-                torch.ones(1) * 2.0, requires_grad=requires_grad
-            )
         # -------------------------------------------------------
 
         # -------------------------------------------------------
@@ -136,17 +123,6 @@ class LadderVAE(nn.Module):
         self.mixed_rec_w = 0
         self.nbr_consistency_w = 0
 
-        # -------------------------------------------------------
-
-        # -------------------------------------------------------
-        # # Training attributes
-        # # can be used to tile the validation predictions
-        # self._val_idx_manager = val_idx_manager
-        # self._val_frame_creator = None
-        # # initialize the learning rate scheduler params.
-        # self.lr_scheduler_monitor = self.lr_scheduler_mode = None
-        # self._init_lr_scheduler_params(config)
-        # self._global_step = 0
         # -------------------------------------------------------
 
         # -------------------------------------------------------
