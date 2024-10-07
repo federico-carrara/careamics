@@ -85,7 +85,7 @@ class ResidualBlock(nn.Module):
         """
         super().__init__()
 
-        # Set kernel size & padding
+        # Set kernel size
         if kernel is None:
             kernel = self.default_kernel_size
         elif isinstance(kernel, int):

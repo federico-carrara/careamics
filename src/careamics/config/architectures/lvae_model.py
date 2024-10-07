@@ -16,9 +16,6 @@ class LVAEModel(ArchitectureModel):
 
     architecture: Literal["LVAE"]
     
-    conv_dims: Literal[2, 3] = Field(default=2, validate_default=True)
-    """Dimensions (2D or 3D) of the convolutional layers."""
-    
     input_shape: int = Field(default=64, ge=8, le=1024)
     multiscale_count: int = Field(default=5)  # TODO clarify
     # 0 - off, len(z_dims) + 1 # TODO can/should be le to z_dims len + 1
@@ -150,28 +147,3 @@ class LVAEModel(ArchitectureModel):
         #         )
 
         return self
-
-    def set_3D(self, is_3D: bool) -> None:
-        """
-        Set 3D model by setting the `conv_dims` parameters.
-
-        Parameters
-        ----------
-        is_3D : bool
-            Whether the algorithm is 3D or not.
-        """
-        if is_3D:
-            self.conv_dims = 3
-        else:
-            self.conv_dims = 2
-
-    def is_3D(self) -> bool:
-        """
-        Return whether the model is 3D or not.
-
-        Returns
-        -------
-        bool
-            Whether the model is 3D or not.
-        """
-        return self.conv_dims == 3

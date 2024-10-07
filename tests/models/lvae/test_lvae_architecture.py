@@ -20,7 +20,6 @@ def create_LVAE_model(
     # TODO: this needs to be refactored using the new noise model
     lvae_model_config = LVAEModel(
         architecture="LVAE",
-        conv_dims=2,
         input_shape=input_shape,
         z_dims=z_dims,
         multiscale_count=multiscale_count,
