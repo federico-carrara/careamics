@@ -52,7 +52,9 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Customizable attributes
-        self.image_size = input_shape # TODO: in the 3D case we'd like to accept also a tuple
+        self.image_size = (
+            input_shape  # TODO: in the 3D case we'd like to accept also a tuple
+        )
         self.target_ch = output_channels
         self.conv_dims = conv_dims
         self._multiscale_count = multiscale_count
@@ -65,10 +67,10 @@ class LadderVAE(nn.Module):
         self.predict_logvar = predict_logvar
         self.analytical_kl = analytical_kl
         # -------------------------------------------------------
-        
+
         if conv_dims != 2:
             raise NotImplementedError("Only 2D convolutions are supported for now.")
-        
+
         # -------------------------------------------------------
         # Model attributes -> Hardcoded
         self.model_type = ModelType.LadderVae  # TODO remove !
@@ -278,10 +280,7 @@ class LadderVAE(nn.Module):
 
             # TODO: check correctness of this
             if self._multiscale_count > 1:
-                output_expected_shape = (
-                    dim // 2 ** (i + 1)
-                    for dim in self.img_shape
-                )
+                output_expected_shape = (dim // 2 ** (i + 1) for dim in self.img_shape)
             else:
                 output_expected_shape = None
 
@@ -340,7 +339,7 @@ class LadderVAE(nn.Module):
             # Check if this is the top layer
             is_top = i == self.n_layers - 1
 
-            if self._enable_topdown_normalize_factor: # TODO: What is this?
+            if self._enable_topdown_normalize_factor:  # TODO: What is this?
                 normalize_latent_factor = (
                     1 / np.sqrt(2 * (1 + i)) if len(self.z_dims) > 4 else 1.0
                 )
@@ -379,10 +378,10 @@ class LadderVAE(nn.Module):
 
     def create_final_topdown_layer(self, upsample: bool) -> nn.Sequential:
         """Create the final top-down layer of the Decoder.
-        
+
         NOTE: In this layer, (optional) upsampling is performed by bilinear interpolation
         instead of transposed convolution (like in other TD layers).
-        
+
         Parameters
         ----------
         upsample: bool
@@ -688,7 +687,7 @@ class LadderVAE(nn.Module):
         x: torch.Tensor
             The input tensor of shape (B, C, H, W).
         """
-        img_size = x.size()[2:]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+        img_size = x.size()[2:]
 
         # Bottom-up inference: return list of length n_layers (bottom to top)
         bu_values = self.bottomup_pass(x)
@@ -706,7 +705,7 @@ class LadderVAE(nn.Module):
             out = crop_img_tensor(out, img_size)
 
         out = self.output_layer(out)
-        
+
         # TODO: this should be removed
         if self._tethered_to_input:
             assert out.shape[1] == 1
@@ -714,7 +713,19 @@ class LadderVAE(nn.Module):
             out = torch.cat([out, ch2], dim=1)
 
         return out, td_data
-    
+
+    def reset_for_different_output_size(self, output_size: int) -> None:
+        """Reset shape of output and latent tensors for different output size.
+
+        Used during evaluation to reset expected shapes of tensors when
+        input/output shape changes.
+        For instance, it is needed when the model was trained on, say, 64x64 sized
+        patches, but prediction is done on 128x128 patches.
+        """
+        for i in range(self.n_layers):
+            sz = output_size // 2 ** (1 + i)
+            self.bottom_up_layers[i].output_expected_shape = (sz, sz)
+            self.top_down_layers[i].latent_shape = (output_size, output_size)
 
     ### SET OF GETTERS
     def get_latent_spatial_size(self, level_idx: int):

@@ -76,7 +76,7 @@ def train_gm_noise_model(
     # TODO any training params ? Different channels ?
     noise_model = GaussianMixtureNoiseModel(model_config)
     # TODO revisit config unpacking
-    noise_model.train_noise_model(noise_model.signal, noise_model.observation)
+    noise_model.train_noise_model(model_config.signal, model_config.observation)
     return noise_model
 
 
@@ -103,7 +103,6 @@ class MultiChannelNoiseModel(nn.Module):
                 self.add_module(
                     f"nmodel_{i}", nmodel
                 )  # TODO: wouldn't be easier to use a list?
-
 
     def likelihood(self, obs: torch.Tensor, signal: torch.Tensor) -> torch.Tensor:
         """Compute the likelihood of observations given signals for each channel.
