@@ -712,20 +712,3 @@ class LadderVAE(nn.Module):
         c = self.z_dims[-1] * 2  # mu and logvar
         top_layer_shape = (n_imgs, c, h, w)
         return top_layer_shape
-
-    def get_other_channel(self, ch1, input):
-        assert self.data_std["target"].squeeze().shape == (2,)
-        assert self.data_mean["target"].squeeze().shape == (2,)
-        assert self.target_ch == 2
-        ch1_un = (
-            ch1[:, :1] * self.data_std["target"][:, :1]
-            + self.data_mean["target"][:, :1]
-        )
-        input_un = input * self.data_std["input"] + self.data_mean["input"]
-        ch2_un = self._tethered_ch2_scalar * (
-            input_un - ch1_un * self._tethered_ch1_scalar
-        )
-        ch2 = (ch2_un - self.data_mean["target"][:, -1:]) / self.data_std["target"][
-            :, -1:
-        ]
-        return ch2
