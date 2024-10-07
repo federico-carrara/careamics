@@ -1217,7 +1217,7 @@ class TopDownLayer(nn.Module):
                         f"bu_value={bu_value.shape[2:]}."
                     )
                     q_params = self.merge(bu_value, p_params)
-        else: # generative mode, q is not used, we sample from p(z_i | z_{i+1})
+        else: # unconditional gen mode, q is not used, we sample from p(z_i | z_{i+1})
             q_params = None
 
         # NOTE: Sampling is done either from q(z_i | z_{i+1}, x) or p(z_i | z_{i+1})
@@ -1259,7 +1259,7 @@ class TopDownLayer(nn.Module):
             
             # NOTE: cropping is done to retain the shape of the input in the output.
             # Therefore we need it only in the case `x` is the same shape of the input,
-            # because that's the only case in which we need to retain the shape.
+            # because that's the only case in which the shape is retained.
             # Here, it must be strictly greater than half the input shape, which is
             # the case if and only if `x.shape == self.latent_shape`. 
             new_latent_shape = tuple(dim // 2 for dim in self.latent_shape)

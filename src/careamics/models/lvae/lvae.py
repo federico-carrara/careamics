@@ -540,7 +540,7 @@ class LadderVAE(nn.Module):
         if final_top_down_layer is None:
             final_top_down_layer = self.final_top_down
 
-        # Default: no layer is sampled from the distribution's mode
+        # Default: no latent is taken as the distribution's mode
         if mode_layers is None:
             mode_layers = []
         if constant_layers is None:
@@ -657,16 +657,15 @@ class LadderVAE(nn.Module):
         """
         # Bottom-up inference: return list of length n_layers (bottom to top)
         bu_values = self.bottomup_pass(x)
+        
+        # TODO: these operations seems unnecessary... Remove?
         for i in range(0, self.skip_bottomk_buvalues):
             bu_values[i] = None
-
         mode_layers = range(self.n_layers) if self.non_stochastic_version else None
 
         # Top-down inference/generation
         out, td_data = self.topdown_pass(bu_values, mode_layers=mode_layers)
-
         out = self.output_layer(out)
-
         return out, td_data
 
     def reset_for_different_output_size(self, output_size: int) -> None:
