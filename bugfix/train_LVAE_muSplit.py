@@ -40,7 +40,7 @@ img_size: int = 64
 """Spatial size of the input image."""
 target_channels: int = 2
 """Number of channels in the target image."""
-multiscale_count: int = 3
+multiscale_count: int = 1
 """The number of LC inputs plus one (the actual input)."""
 predict_logvar: Optional[Literal["pixelwise"]] = "pixelwise"
 """Whether to compute also the log-variance as LVAE output."""
