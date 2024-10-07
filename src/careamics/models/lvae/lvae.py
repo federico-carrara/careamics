@@ -20,7 +20,7 @@ from .layers import (
     TopDownDeterministicResBlock,
     TopDownLayer,
 )
-from .utils import Interpolate, ModelType, crop_img_tensor, pad_img_tensor
+from .utils import Interpolate, ModelType
 
 
 @register_model("LVAE")
