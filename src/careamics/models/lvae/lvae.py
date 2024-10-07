@@ -657,8 +657,6 @@ class LadderVAE(nn.Module):
         x: torch.Tensor
             The input tensor of shape (B, C, H, W).
         """
-        img_size = x.size()[2:]
-
         # Bottom-up inference: return list of length n_layers (bottom to top)
         bu_values = self.bottomup_pass(x)
         for i in range(0, self.skip_bottomk_buvalues):
@@ -669,18 +667,7 @@ class LadderVAE(nn.Module):
         # Top-down inference/generation
         out, td_data = self.topdown_pass(bu_values, mode_layers=mode_layers)
 
-        # TODO: this should not be necessary anymore
-        if out.shape[-1] > img_size[-1]:
-            # Restore original image size
-            out = crop_img_tensor(out, img_size)
-
         out = self.output_layer(out)
-
-        # TODO: this should be removed
-        if self._tethered_to_input:
-            assert out.shape[1] == 1
-            ch2 = self.get_other_channel(out, x)
-            out = torch.cat([out, ch2], dim=1)
 
         return out, td_data
 
