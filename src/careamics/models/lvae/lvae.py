@@ -30,7 +30,6 @@ class LadderVAE(nn.Module):
         self,
         input_shape: int,
         output_channels: int,
-        conv_dims: int,
         multiscale_count: int,
         z_dims: list[int],
         encoder_n_filters: int,
@@ -56,7 +55,6 @@ class LadderVAE(nn.Module):
             input_shape  # TODO: in the 3D case we'd like to accept also a tuple
         )
         self.target_ch = output_channels
-        self.conv_dims = conv_dims
         self._multiscale_count = multiscale_count
         self.z_dims = z_dims
         self.encoder_n_filters = encoder_n_filters
@@ -67,9 +65,6 @@ class LadderVAE(nn.Module):
         self.predict_logvar = predict_logvar
         self.analytical_kl = analytical_kl
         # -------------------------------------------------------
-
-        if conv_dims != 2:
-            raise NotImplementedError("Only 2D convolutions are supported for now.")
 
         # -------------------------------------------------------
         # Model attributes -> Hardcoded
@@ -112,7 +107,7 @@ class LadderVAE(nn.Module):
         # -------------------------------------------------------
         # Data attributes
         self.color_ch = 1
-        self.img_shape = tuple([self.image_size] * self.conv_dims)
+        self.img_shape = (self.image_size, self.image_size)
         self.normalized_input = True
         # -------------------------------------------------------
 
@@ -164,7 +159,7 @@ class LadderVAE(nn.Module):
 
         # Output layer --> Project to target_ch many channels
         logvar_ch_needed = self.predict_logvar is not None
-        self.output_layer = self.parameter_net = getattr(nn, f"Conv{self.conv_dims}d")(
+        self.output_layer = self.parameter_net = nn.Conv2d(
             self.decoder_n_filters,
             self.target_ch * (1 + logvar_ch_needed),
             kernel_size=3,
@@ -196,7 +191,7 @@ class LadderVAE(nn.Module):
             The number of BottomUpDeterministicResBlocks to include in the layer, default is 1.
         """
         nonlin = get_activation(self.nonlin)
-        conv_block = getattr(nn, f"Conv{self.conv_dims}d")(
+        conv_block = nn.Conv2d(
             in_channels=self.color_ch,
             out_channels=self.encoder_n_filters,
             kernel_size=self.encoder_res_block_kernel,
@@ -208,7 +203,6 @@ class LadderVAE(nn.Module):
         for _ in range(num_res_blocks):
             modules.append(
                 BottomUpDeterministicResBlock(
-                    conv_dims=self.conv_dims,
                     c_in=self.encoder_n_filters,
                     c_out=self.encoder_n_filters,
                     nonlin=nonlin,
