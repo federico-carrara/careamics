@@ -676,6 +676,15 @@ class LadderVAE(nn.Module):
         input/output shape changes.
         For instance, it is needed when the model was trained on, say, 64x64 sized
         patches, but prediction is done on 128x128 patches.
+        
+        Parameters
+        ----------
+        output_size: int
+            The new output size for the model.
+            
+        Returns
+        -------
+        None
         """
         for i in range(self.n_layers):
             sz = output_size // 2 ** (1 + i)
@@ -683,9 +692,20 @@ class LadderVAE(nn.Module):
             self.top_down_layers[i].latent_shape = (output_size, output_size)
 
     ### SET OF GETTERS
-    def get_latent_spatial_size(self, level_idx: int):
-        """
-        level_idx: 0 is the bottommost layer, the highest resolution one.
+    def get_latent_spatial_size(self, level_idx: int) -> int:
+        """Get the spatial size of the latent variable at a given level.
+        
+        NOTE: level_idx: 0 is the bottommost layer, the highest resolution one.
+        
+        Parameters
+        ----------
+        level_idx: int
+            The level of the layer for which we want to get the latent spatial size.
+            
+        Returns
+        -------
+        int
+            The spatial size of the latent variable at the given level.
         """
         actual_downsampling = level_idx + 1
         dwnsc = 2**actual_downsampling
@@ -694,7 +714,20 @@ class LadderVAE(nn.Module):
         assert h == w
         return h
 
-    def get_top_prior_param_shape(self, n_imgs: int = 1):
+    def get_top_prior_param_shape(self, n_imgs: int = 1) -> tuple[int, int, int, int]:
+        """Get the shape of the parameters of the top-most prior distribution.
+        
+        Parameters
+        ----------
+        n_imgs: int, optional
+            The number of images for which to get the shape of the parameters in case
+            it needs to be replicated. Default is 1.
+            
+        Returns
+        -------
+        tuple[int, int, int, int]
+            The shape of the parameters of the top-most prior distribution.
+        """
         # TODO num channels depends on random variable we're using
 
         # Compute the total downscaling performed in the Encoder
