@@ -117,11 +117,9 @@ class LadderVAE(nn.Module):
         # enabling reconstruction loss on mixed input
         self.mixed_rec_w = 0
         self.nbr_consistency_w = 0
-
         # -------------------------------------------------------
 
         # -------------------------------------------------------
-
         # Calculate the downsampling happening in the network
         self.downsample = [1] * self.n_layers
         self.overall_downscale_factor = np.power(2, sum(self.downsample))
