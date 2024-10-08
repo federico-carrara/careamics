@@ -747,14 +747,13 @@ class MergeLowRes(MergeLayer):
             latent = pad_img_tensor(latent, lowres.shape[2:]) 
         else:
             # Crop lowres tensor to match latent tensor's shape
-            lz, ly, lx = lowres.shape[2:] 
-            z = lz // self.multiscale_lowres_size_factor 
+            # NOTE: in curr implementation, in 3D case Z dim is left untouched
+            ly, lx = lowres.shape[-2:] 
             y = ly // self.multiscale_lowres_size_factor
             x = lx // self.multiscale_lowres_size_factor
-            z_pad = (lz - z) // 2
             y_pad = (ly - y) // 2
             x_pad = (lx - x) // 2
-            lowres = lowres[:, :, z_pad:-z_pad, y_pad:-y_pad, x_pad:-x_pad]
+            lowres = lowres[..., y_pad:-y_pad, x_pad:-x_pad]
 
         return super().forward(latent, lowres)
 

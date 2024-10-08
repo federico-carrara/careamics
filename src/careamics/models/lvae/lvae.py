@@ -25,7 +25,6 @@ from .utils import Interpolate, ModelType
 
 @register_model("LVAE")
 class LadderVAE(nn.Module):
-    # TODO: where has `data_mean` and `data_std` gone?
     def __init__(
         self,
         input_shape: int,
@@ -234,16 +233,13 @@ class LadderVAE(nn.Module):
 
         bottom_up_layers = nn.ModuleList([])
         for i in range(self.n_layers):
-            # Whether this is the top layer
-            is_top = i == self.n_layers - 1
-
             # LC is applied only to the first (_multiscale_count - 1) bottom-up layers
             layer_enable_multiscale = (
                 self.enable_multiscale and self._multiscale_count > i + 1
             )
 
-            # This factor determines the factor by which the low-resolution tensor is larger
-            # N.B. Only used if layer_enable_multiscale == True, so we updated it only in that case
+            # This determines the factor by which the low-resolution tensor is larger
+            # N.B. Only used if layer_enable_multiscale == True
             multiscale_lowres_size_factor *= 1 + int(layer_enable_multiscale)
 
             # TODO: check correctness of this
