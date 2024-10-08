@@ -2,7 +2,7 @@
 Script for utility functions needed by the LVAE model.
 """
 
-from typing import Iterable, Literal
+from typing import Literal, Sequence
 
 import numpy as np
 import torch
@@ -102,7 +102,7 @@ class ModelType(Enum):
 
 def _pad_crop_img(
     x: torch.Tensor, 
-    size: Iterable[int],
+    size: Sequence[int],
     mode: Literal["crop", "pad"]
 ) -> torch.Tensor:
     """Pads or crops a tensor.
@@ -111,11 +111,16 @@ def _pad_crop_img(
     
     Parameters:
     -----------
-        x (torch.Tensor): Input image of shape (B, C, [Z], Y, X)
-        size (list or tuple): Desired size ([Z*], Y*, X*)
-        mode (str): Mode, either 'pad' or 'crop'
+    x: torch.Tensor 
+        Input image of shape (B, C, [Z], Y, X)
+    size: Sequence[int] 
+        Desired size ([Z*], Y*, X*)
+    mode: Literal["crop", "pad"]
+        Mode, either 'pad' or 'crop'
+        
     Returns:
     --------
+    torch.Tensor:
         The padded or cropped tensor
     """
     # TODO: Support cropping/padding on selected dimensions
@@ -149,7 +154,7 @@ def _pad_crop_img(
             return x[:, :, d1[0]:(x_size[0] - d2[0]), d1[1]:(x_size[1] - d2[1]), d1[2]:(x_size[2] - d2[2])]
 
 
-def pad_img_tensor(x: torch.Tensor, size: Iterable[int]) -> torch.Tensor:
+def pad_img_tensor(x: torch.Tensor, size: Sequence[int]) -> torch.Tensor:
     """Pads a tensor
     
     Pads a tensor of shape (B, C, [Z], Y, X) to desired spatial dimensions.
@@ -280,7 +285,7 @@ class StableLogVar:
         """
         return self._lv.dim() == 5
 
-    def centercrop_to_size(self, size: Iterable[int]) -> None:
+    def centercrop_to_size(self, size: Sequence[int]) -> None:
         """
         Centercrop the log-variance tensor to the desired size.
 
@@ -315,7 +320,7 @@ class StableMean:
         """
         return self._mean.dim() == 5
 
-    def centercrop_to_size(self, size: Iterable[int]) -> None:
+    def centercrop_to_size(self, size: Sequence[int]) -> None:
         """Centercrop the mean tensor to the desired size.
 
         Implemented only in the case of 2D tensors.
