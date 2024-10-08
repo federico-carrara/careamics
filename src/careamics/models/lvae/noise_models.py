@@ -104,6 +104,13 @@ class MultiChannelNoiseModel(nn.Module):
                     f"nmodel_{i}", nmodel
                 )  # TODO: wouldn't be easier to use a list?
 
+        self._nm_cnt = 0
+        for nmodel in nmodels:
+            if nmodel is not None:
+                self._nm_cnt += 1
+
+        print(f"[{self.__class__.__name__}] Nmodels count:{self._nm_cnt}")
+
     def likelihood(self, obs: torch.Tensor, signal: torch.Tensor) -> torch.Tensor:
         """Compute the likelihood of observations given signals for each channel.
 
