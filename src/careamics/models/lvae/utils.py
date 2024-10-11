@@ -5,13 +5,10 @@ Script for utility functions needed by the LVAE model.
 from typing import Iterable
 
 import numpy as np
-from pydantic import BaseModel, Field
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as F
 from torch.distributions.normal import Normal
-
-from careamics.utils.fpbase import get_fp_emission_spectrum
 
 
 def torch_nanmean(inp):

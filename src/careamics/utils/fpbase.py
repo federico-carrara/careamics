@@ -4,14 +4,10 @@ Adapted from https://github.com/tlambert03/microsim.
 """
 
 import json
-from typing import Optional, Sequence, Union
-from functools import cached_property
+from typing import Optional, Union
 from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, field_validator, model_validator
 import torch
-
-from .spectral import Spectrum
 
 FPBASE_URL = "https://www.fpbase.org/graphql/"
 
@@ -137,11 +133,12 @@ def get_fluorophore(name: str) -> dict:
     raise ValueError(f"Invalid fluorophore type {fluor_info['type']!r}")
 
 
-def get_fp_emission_spectrum(name: str) -> Optional[Spectrum]:
+def get_fp_emission_spectrum(name: str) -> Optional[torch.Tensor]:
     """Get the fluorophore emission spectrum (wavelengths and intensities).
     
     The FP information is scraped from FPBase given its name.
-    Then spectral information is extracted and returned as a `Spectrum` object.
+    Then spectral information is extracted and returned as a [W, 2] tensor,
+    where the 1st columns represent wavelengths and the 2nd the associated intensities.
     
     NOTE: in FPBase, intensities are normalized s.t. the max is 1.
     
@@ -157,11 +154,10 @@ def get_fp_emission_spectrum(name: str) -> Optional[Spectrum]:
     """
     flurophore = get_fluorophore(name)
     state = next(
-        st for st in flurophore["states"] 
+        st for st in flurophore["states"]
         if st["id"] == flurophore["defaultState"]["id"]
     )
     spectrum = next(
         (sp["data"] for sp in state["spectra"] if sp["subtype"] == "EM"), None
     )
-    spectrum = torch.tensor(spectrum) if spectrum is not None else None
-    return Spectrum(wavelength=spectrum[:, 0], intensity=spectrum[:, 1])
+    return torch.tensor(spectrum) if spectrum is not None else None

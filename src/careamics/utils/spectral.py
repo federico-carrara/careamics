@@ -1,12 +1,12 @@
 """Utility functions for working with spectral data."""
 
-from typing import Sequence
-from functools import cached_property
 import warnings
+from functools import cached_property
+from typing import Sequence
 
-from pydantic import BaseModel, field_validator, model_validator
 import numpy as np
 import torch
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from .fpbase import get_fp_emission_spectrum
 
@@ -16,11 +16,17 @@ class Spectrum(BaseModel):
     
     Adapted from https://github.com/tlambert03/microsim.
     """
+
+    model_config = ConfigDict(
+        validate_assignment=True,
+        set_arbitrary_types_allowed=True,
+    )
+
     wavelength: torch.Tensor
     """The set of wavelength of the spectrum."""
     intensity: torch.Tensor
     """The intensity of the spectrum."""
-    
+
     @field_validator("intensity", mode="after")
     @classmethod
     def _validate_intensity(cls, value: torch.Tensor) -> torch.Tensor:
@@ -39,7 +45,12 @@ class Spectrum(BaseModel):
                     "Wavelength and intensity must have the same length"
                 )
         return value
-    
+
+    @classmethod
+    def from_fpbase(cls, name: str) -> "Spectrum":
+        data = get_fp_emission_spectrum(name)
+        return cls(wavelength=data[:, 0], intensity=data[:, 1])
+
     def _align(self, other: 'Spectrum') -> tuple['Spectrum', 'Spectrum']:
         """Align self and other over their wavelength attributes.
         
@@ -89,14 +100,14 @@ class Spectrum(BaseModel):
         indices = (
             new_wavelengths >= self.wavelength.min() * new_wavelengths <= self.wavelength.max()
         )
-        
+
         # get interpolated intesities
         new_intensity = torch.zeros_like(new_wavelengths)
         new_intensity[indices] = self.intensity
-        
+
         return new_intensity
-    
-    def _get_bins(self, num_bins: int, interval: Sequence[int, int],) -> torch.Tensor:
+
+    def _get_bins(self, num_bins: int, interval: Sequence[int],) -> torch.Tensor:
         """Get bin delimiters for the given interval.
         
         Parameters
@@ -120,7 +131,7 @@ class Spectrum(BaseModel):
             curr_bin_length = min_bin_length if i >= remainder else min_bin_length + 1
             bins.append(bins[-1] + curr_bin_length)
         return torch.tensor(bins)
-    
+
     def bin_intensity(self, num_bins: int) -> torch.Tensor:
         """Bins the intensity values according to the provided bins for the wavelength.
         
@@ -148,26 +159,27 @@ class Spectrum(BaseModel):
         for i in range(1, len(bin_edges)):
             mask = bin_indices == i
             binned_intensity[i - 1] = self.intensity[mask].sum()
-        
+
         return binned_intensity
-    
-    
+
+
 class FPRefMatrix(BaseModel):
     """
     This class is used to create a reference matrix of fluorophore emission spectra
     for the spectral unmixing task.
     """
+
     fp_names: Sequence[str]
     """The names of the fluorophores to include in the reference matrix."""
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
-    
+
     @cached_property
     def fp_spectra(self) -> list[Spectrum]:
         """Aligned fluorophore emission spectra."""
         # fetch emission spectra
-        fp_sp = [get_fp_emission_spectrum(fp_name) for fp_name in self.fp_names]
-        
+        fp_sp = [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
+
         # align spectra
         fp_sp0, *rest = fp_sp
         align_fp_sp = []
@@ -175,23 +187,23 @@ class FPRefMatrix(BaseModel):
             fp_sp0, sp = fp_sp0._align(sp)
             align_fp_sp.append(sp)
         align_fp_sp = [fp_sp0] + align_fp_sp
-        
+
         return align_fp_sp
-    
+
     @cached_property
     def binned_fp_intensities(self) -> list[torch.Tensor]:
         """Binned fluorophore emission spectrum intensities."""
         return [
             fp_spectrum.bin_intensity(self.n_bins) for fp_spectrum in self.fp_spectra
         ]
-    
+
     def _normalize(self) -> list[torch.Tensor]:
         """Normalize the binned intensities of the emission spectra."""
         return [
             (curr - curr.min()) / (curr.max() - curr.min())
             for curr in self.binned_fp_intensities
         ]
-        
+
     def create(self) -> torch.Tensor:
         """Create the reference matrix.
         
@@ -200,6 +212,6 @@ class FPRefMatrix(BaseModel):
         """
         normalized_fp_intensities = self._normalize()
         return torch.stack(
-            [intensity for intensity in normalized_fp_intensities], 
+            [intensity for intensity in normalized_fp_intensities],
             axis=0
         )
