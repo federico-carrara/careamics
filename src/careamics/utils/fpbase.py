@@ -20,10 +20,10 @@ class Spectrum(BaseModel):
     
     Adapted from https://github.com/tlambert03/microsim.
     """
-    intensity: torch.Tensor
-    """The intensity of the spectrum."""
     wavelength: torch.Tensor
     """The set of wavelength of the spectrum."""
+    intensity: torch.Tensor
+    """The intensity of the spectrum."""
     
     @field_validator("intensity", mode="after")
     @classmethod
@@ -166,15 +166,13 @@ def get_fluorophore(name: str) -> dict:
     raise ValueError(f"Invalid fluorophore type {fluor_info['type']!r}")
 
 
-def get_fp_emission_spectrum(name: str) -> Optional[torch.Tensor]:
+def get_fp_emission_spectrum(name: str) -> Optional[Spectrum]:
     """Get the fluorophore emission spectrum (wavelengths and intensities).
     
     The FP information is scraped from FPBase given its name.
-    Then spectral information is extracted and returned as a tensors of
-    shape [W, 2], where W is the number of wavelengths and columns are, respectively,
-    the wavelength indices and the relative intensities.
+    Then spectral information is extracted and returned as a `Spectrum` object.
     
-    NOTE: intensities are normalized s.t. the max is 1.
+    NOTE: in FPBase, intensities are normalized s.t. the max is 1.
     
     Parameters
     ----------
@@ -194,7 +192,8 @@ def get_fp_emission_spectrum(name: str) -> Optional[torch.Tensor]:
     spectrum = next(
         (sp["data"] for sp in state["spectra"] if sp["subtype"] == "EM"), None
     )
-    return torch.tensor(spectrum) if spectrum is not None else None 
+    spectrum = torch.tensor(spectrum) if spectrum is not None else None
+    return Spectrum(wavelength=spectrum[:, 0], intensity=spectrum[:, 1])
 
 
 class FPRefMatrix(BaseModel):
