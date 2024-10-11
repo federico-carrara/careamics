@@ -342,41 +342,28 @@ class FPRefMatrix(BaseModel):
         
         return align_fp_sp
     
-    def _normalize(self) -> np.ndarray:
-        assert self.fp_em_list is not None
+    @cached_property
+    def binned_fp_intensities(self) -> list[torch.Tensor]:
+        """Binned fluorophore emission spectrum intensities."""
         return [
-            (fp_em - fp_em.min()) / (fp_em.max() - fp_em.min())
-            for fp_em in self.fp_em_list
+            fp_spectrum.bin_intensity(self.n_bins) for fp_spectrum in self.fp_spectra
         ]
     
-    def _fill_NaNs(self, num: int = 0) -> list[xr.DataArray]:
-        assert self.fp_em_list is not None
+    def _normalize(self) -> list[torch.Tensor]:
+        """Normalize the binned intensities of the emission spectra."""
         return [
-            fp_em.fillna(num)
-            for fp_em in self.fp_em_list
+            (curr - curr.min()) / (curr.max() - curr.min())
+            for curr in self.binned_fp_intensities
         ]
         
-    def bin_spectra(self) -> list[torch.Tensor]:
-        """Bins the emission spectra of all the fluorophores."""
-        return [
-            fp_spectrum._bin_intensity(fp_em["w"], self.sbins).sum()
-            for fp_spectrum in self.fp_spectra
-        ]
+    def create(self) -> torch.Tensor:
+        """Create the reference matrix.
         
-    def create(self) -> np.ndarray:
-        self.fp_list = self._fetch_FPs()
-        self.fp_em_list = [
-            xr.DataArray(
-                fp.emission_spectrum.intensity, 
-                coords=[fp.emission_spectrum.wavelength.magnitude], 
-                dims=["w"]
-            )
-            for fp in self.fp_list
-        ]
-        self.fp_em_list = self._bin_spectra()
-        self.fp_em_list = self._fill_NaNs()
-        self.fp_em_list = self._normalize()
-        return np.stack(
-            [fp_em.values for fp_em in self.fp_em_list], 
-            axis=1
+        The shape of the matrix is [W, F], where W is the number of wavelength bins
+        and F is the number of fluorophores.
+        """
+        normalized_fp_intensities = self._normalize()
+        return torch.stack(
+            [intensity for intensity in normalized_fp_intensities], 
+            axis=0
         )
