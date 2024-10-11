@@ -162,14 +162,6 @@ class FPRefMatrix(BaseModel):
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
     
-    @property
-    def N(self) -> int:  # TODO: check consistency with naming
-        return len(self.fp_names)
-
-    @property
-    def P(self) -> int:  # TODO: check consistency with naming
-        return len(self.w_bins)
-    
     @cached_property
     def fp_spectra(self) -> list[Spectrum]:
         """Aligned fluorophore emission spectra."""
