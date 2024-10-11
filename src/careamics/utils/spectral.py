@@ -55,16 +55,16 @@ class Spectrum(BaseModel):
         tuple[Spectrum, Spectrum]
             The aligned self and other Spectrums.
         """
-        # Get union of wavelength range
+        # get union of wavelength range
         w_min = min(self.wavelength.min(), other.wavelength.min())
         w_max = max(self.wavelength.max(), other.wavelength.max())
         new_range = torch.arange(w_min, w_max + 1)
 
-        # Create interpolated intensity for self and other
+        # create interpolated intensity for self and other
         aligned_self_intensity = self._interpolate_intensity(new_range)
         aligned_other_intensity = other._interpolate_intensity(new_range)
 
-        # Return new aligned Spectrums
+        # return new aligned Spectrums
         aligned_self = Spectrum(wavelength=new_range, intensity=aligned_self_intensity)
         aligned_other = Spectrum(wavelength=new_range, intensity=aligned_other_intensity)
 
@@ -85,12 +85,12 @@ class Spectrum(BaseModel):
         torch.Tensor
             The interpolated intensity values, with 0's to fill.
         """
-        # Find where the new wavelengths match the existing ones
+        # find where the new wavelengths match the existing ones
         indices = (
             new_wavelengths >= self.wavelength.min() * new_wavelengths <= self.wavelength.max()
         )
         
-        # Get interpolated intesities
+        # get interpolated intesities
         new_intensity = torch.zeros_like(new_wavelengths)
         new_intensity[indices] = self.intensity
         
@@ -134,17 +134,17 @@ class Spectrum(BaseModel):
         torch.Tensor
             Binned intensity values.
         """
-        # Initialize
+        # initialize
         bin_edges = self._get_bins(
             num_bins=num_bins,
             interval=(self.wavelength.min(), self.wavelength.max())
         )
         binned_intensity = torch.zeros(len(bin_edges) - 1)
 
-        # Digitize the wavelength tensor into bin indices
+        # digitize the wavelength tensor into bin indices
         bin_indices = torch.bucketize(self.wavelength, bin_edges, right=False)
 
-        # Perform the binning
+        # perform the binning
         for i in range(1, len(bin_edges)):
             mask = bin_indices == i
             binned_intensity[i - 1] = self.intensity[mask].sum()
