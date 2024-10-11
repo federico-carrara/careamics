@@ -7,10 +7,42 @@ import json
 from typing import Optional, Union
 # from functools import cache
 from urllib.request import Request, urlopen
+import warnings
 
+from pydantic import BaseModel, field_validator, model_validator
+import numpy as np
 import torch
 
 FPBASE_URL = "https://www.fpbase.org/graphql/"
+
+class Spectrum(BaseModel):
+    """A Spectrum object defined by its intensity and wavelengths.
+    
+    Adapted from https://github.com/tlambert03/microsim.
+    """
+    intensity: torch.Tensor
+    """The intensity of the spectrum."""
+    wavelength: torch.Tensor
+    """The set of wavelength of the spectrum."""
+    
+    @field_validator("intensity", mode="after")
+    @classmethod
+    def _validate_intensity(cls, value: torch.Tensor) -> torch.Tensor:
+        if not np.all(value >= 0):
+            warnings.warn(
+                "Clipping negative intensity values in spectrum to 0", stacklevel=2
+            )
+            value = np.clip(value, 0, None)
+        return value
+
+    @model_validator(mode="before")
+    def _validate_shapes(cls, value: 'Spectrum') -> 'Spectrum':
+        if "wavelength" in value and "intensity" in value:
+            if not len(value["wavelength"]) == len(value["intensity"]):
+                raise ValueError(
+                    "Wavelength and intensity must have the same length"
+                )
+        return value
 
 
 # @cache
@@ -163,3 +195,71 @@ def get_fp_emission_spectrum(name: str) -> Optional[torch.Tensor]:
         (sp["data"] for sp in state["spectra"] if sp["subtype"] == "EM"), None
     )
     return torch.tensor(spectrum) if spectrum is not None else None 
+
+
+class FPRefMatrix(BaseModel):
+    """
+    This class is used to create a reference matrix of fluorophore emission spectra
+    for the spectral unmixing task.
+    """
+    fp_names: Optional[list[str]] = None
+    w_bins: int = 32
+    fp_em_list = None # list of xr.DataArray's containing emission spectra
+    
+    @property
+    def N(self) -> int:  # TODO: check consistency with naming
+        return len(self.fp_names)
+
+    @property
+    def P(self) -> int:  # TODO: check consistency with naming
+        return len(self.w_bins)
+    
+    @property
+    def sbins(self) -> int:
+        return sorted(set([bins[0] for bins in self.w_bins] + [self.w_bins[-1][1]]))
+    
+    @property
+    def fp_spectra(self) -> list[[torch.Tensor]]:
+        pass
+    
+    def _fetch_fp_s(self) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        return [Fluorophore.from_fpbase(name=fp_name) for fp_name in self.fp_names]
+    
+    def _normalize(self) -> np.ndarray:
+        assert self.fp_em_list is not None
+        return [
+            (fp_em - fp_em.min()) / (fp_em.max() - fp_em.min())
+            for fp_em in self.fp_em_list
+        ]
+    
+    def _fill_NaNs(self, num: int = 0) -> list[xr.DataArray]:
+        assert self.fp_em_list is not None
+        return [
+            fp_em.fillna(num)
+            for fp_em in self.fp_em_list
+        ]
+    
+    def _bin_spectra(self) -> list[xr.DataArray]:
+        assert self.fp_em_list is not None
+        return [
+            fp_em.groupby_bins(fp_em["w"], self.sbins).sum()
+            for fp_em in self.fp_em_list
+        ]
+        
+    def create(self) -> np.ndarray:
+        self.fp_list = self._fetch_FPs()
+        self.fp_em_list = [
+            xr.DataArray(
+                fp.emission_spectrum.intensity, 
+                coords=[fp.emission_spectrum.wavelength.magnitude], 
+                dims=["w"]
+            )
+            for fp in self.fp_list
+        ]
+        self.fp_em_list = self._bin_spectra()
+        self.fp_em_list = self._fill_NaNs()
+        self.fp_em_list = self._normalize()
+        return np.stack(
+            [fp_em.values for fp_em in self.fp_em_list], 
+            axis=1
+        )
