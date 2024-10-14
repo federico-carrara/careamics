@@ -19,7 +19,7 @@ class Spectrum(BaseModel):
 
     model_config = ConfigDict(
         validate_assignment=True,
-        set_arbitrary_types_allowed=True,
+        arbitrary_types_allowed=True,
     )
 
     wavelength: torch.Tensor
