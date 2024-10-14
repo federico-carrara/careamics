@@ -21,6 +21,9 @@ def compute_normalization_stats(image: NDArray) -> tuple[NDArray, NDArray]:
     tuple of (list of floats, list of floats)
         Lists of mean and standard deviation values per channel.
     """
+    # TODO: by default norm stats are compute by-channel. We could add an option to
+    # compute them globally.
+    
     # Define the list of axes excluding the channel axis
     axes = tuple(np.delete(np.arange(image.ndim), 1))
     return np.mean(image, axis=axes), np.std(image, axis=axes)
