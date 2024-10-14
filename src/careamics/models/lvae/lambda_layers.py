@@ -23,6 +23,16 @@ class SpectralMixer(nn.Module):
         *,
         num_bins: int = 32,
     ):
+        """
+        Parameters
+        ----------
+        flurophores : Sequence[str]
+            A sequence of fluorophore names.
+        ref_learnable : bool, optional
+            Whether to make the reference matrix learnable. Default is `False`.
+        num_bins : int, optional
+            The number of bins to use for the reference matrix. Default is 32.
+        """
         super().__init__()
         
         # get the reference matrix from FPBase
