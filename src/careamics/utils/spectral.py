@@ -30,7 +30,7 @@ class Spectrum(BaseModel):
     @field_validator("intensity", mode="after")
     @classmethod
     def _validate_intensity(cls, value: torch.Tensor) -> torch.Tensor:
-        if not np.all(value >= 0):
+        if not torch.all(value >= 0):
             warnings.warn(
                 "Clipping negative intensity values in spectrum to 0", stacklevel=2
             )
@@ -97,9 +97,7 @@ class Spectrum(BaseModel):
             The interpolated intensity values, with 0's to fill.
         """
         # find where the new wavelengths match the existing ones
-        indices = (
-            new_wavelengths >= self.wavelength.min() * new_wavelengths <= self.wavelength.max()
-        )
+        indices = (new_wavelengths >= self.wavelength.min()) * (new_wavelengths <= self.wavelength.max())
 
         # get interpolated intesities
         new_intensity = torch.zeros_like(new_wavelengths)
@@ -167,6 +165,15 @@ class FPRefMatrix(BaseModel):
     """
     This class is used to create a reference matrix of fluorophore emission spectra
     for the spectral unmixing task.
+    
+    Example
+    -------
+    # Initialize the reference matrix
+    >>> fp_names = ["mCherry", "mTurquoise2", "mVenus"]
+    >>> ref_matrix = FPRefMatrix(fp_names=fp_names, n_bins=32)
+    
+    # Create the reference matrix
+    >>> ref_matrix.create()
     """
 
     fp_names: Sequence[str]
@@ -197,21 +204,49 @@ class FPRefMatrix(BaseModel):
             fp_spectrum.bin_intensity(self.n_bins) for fp_spectrum in self.fp_spectra
         ]
 
-    def _normalize(self) -> list[torch.Tensor]:
-        """Normalize the binned intensities of the emission spectra."""
+    def _normalize(self, intensities: list[torch.Tensor]) -> list[torch.Tensor]:
+        """Normalize the intensities of the emission spectra in [0, 1].
+        
+        Parameters
+        ----------
+        intensities : list[torch.Tensor]
+            The intensities to normalize.
+        
+        Returns
+        -------
+        list[torch.Tensor]
+            The normalized intensities.
+        """
         return [
             (curr - curr.min()) / (curr.max() - curr.min())
-            for curr in self.binned_fp_intensities
+            for curr in intensities
         ]
-
-    def create(self) -> torch.Tensor:
+        
+    def create(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
         """Create the reference matrix.
         
-        The shape of the matrix is [W, F], where W is the number of wavelength bins
+        The shape of the matrix is [F, W], where W is the number of wavelength bins
         and F is the number of fluorophores.
+        
+        Parameters
+        ----------
+        binned : bool
+            Whether to use binned intensities. Default is True.
+        normalize : bool
+            Whether to normalize the intensities. Default is True.
+        
+        Returns
+        -------
+        torch.Tensor
+            The reference matrix.
         """
-        normalized_fp_intensities = self._normalize()
+        intensities = (
+            self.binned_fp_intensities 
+            if binned else [fp.intensity for fp in self.fp_spectra]
+        )
+        if normalize:
+            intensities = self._normalize(intensities)
         return torch.stack(
-            [intensity for intensity in normalized_fp_intensities],
+            [intensity for intensity in intensities],
             axis=0
         )
