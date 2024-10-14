@@ -1,9 +1,10 @@
-from typing import Sequence, TYPE_CHECKING
+from typing import Sequence
 
+import torch
 import torch.nn as nn
 
-if TYPE_CHECKING:
-    import torch
+from careamics.utils.spectral import FPRefMatrix
+
 
 class SpectralMixer(nn.Module):
     """
@@ -13,16 +14,20 @@ class SpectralMixer(nn.Module):
     ----------
     ref_matrix : nn.Parameter
         The reference matrix to use for the spectral mixing. Shape is (W, F), where W
-        is the number of spectral bandss and F is the number of fluorophores to unmix.
+        is the number of spectral bands and F is the number of fluorophores to unmix.
     """
     def __init__(
         self,
         flurophores: Sequence[str],
         ref_learnable: bool = False,
+        *,
+        num_bins: int = 32,
     ):
+        super().__init__()
+        
         # get the reference matrix from FPBase
-        self.ref_matrix = nn.Parameter(...)
-        pass
+        matrix = FPRefMatrix(fp_names=flurophores, n_bins=num_bins)
+        self.ref_matrix = nn.Parameter(matrix.create(), requires_grad=ref_learnable)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -39,7 +44,7 @@ class SpectralMixer(nn.Module):
             The mixed spectral image. Shape is (B, W, Y, X), where W is the number of
             spectral channels.
         """
-        b, _, h, w = x.shape[-2:] 
-        return torch.matmul(self.ref_matrix, x.view(b, p, -1)).view(b, n, h, w)
+        B, F, H, W = x.shape 
+        return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, H, W)
     
 

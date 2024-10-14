@@ -225,7 +225,7 @@ class FPRefMatrix(BaseModel):
     def create(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
         """Create the reference matrix.
         
-        The shape of the matrix is [F, W], where W is the number of wavelength bins
+        The shape of the matrix is [W, F], where W is the number of wavelength bins
         and F is the number of fluorophores.
         
         Parameters
@@ -248,5 +248,5 @@ class FPRefMatrix(BaseModel):
             intensities = self._normalize(intensities)
         return torch.stack(
             [intensity for intensity in intensities],
-            axis=0
+            axis=1
         )
