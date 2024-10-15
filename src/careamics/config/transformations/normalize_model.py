@@ -29,6 +29,7 @@ class NormalizeModel(TransformModel):
     )
 
     name: Literal["Normalize"] = "Normalize"
+    norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
     image_means: list = Field(..., min_length=0, max_length=32)
     image_stds: list = Field(..., min_length=0, max_length=32)
     target_means: Optional[list] = Field(default=None, min_length=0, max_length=32)
