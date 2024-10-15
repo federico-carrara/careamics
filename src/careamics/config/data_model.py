@@ -107,6 +107,10 @@ class DataConfig(BaseModel):
     """Batch size for training."""
 
     # Optional fields
+    norm_strategy: Optional[Literal["channel-wise", "global"]] = "channel-wise"
+    """Normalization strategy, either channel-wise or global. It is particularly
+    important in the case of multi-channel data."""
+    
     image_means: Optional[list[Float]] = Field(
         default=None, min_length=0, max_length=32
     )

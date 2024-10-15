@@ -74,6 +74,7 @@ class InMemoryDataset(Dataset):
         self.input_targets = input_target
         self.axes = self.data_config.axes
         self.patch_size = self.data_config.patch_size
+        self.norm_strategy = self.data_config.norm_strategy
 
         # read function
         self.read_source_func = read_source_func
@@ -150,6 +151,7 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.input_targets,
                     self.patch_size,
+                    self.norm_strategy,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
@@ -157,6 +159,7 @@ class InMemoryDataset(Dataset):
                     self.input_targets,
                     self.axes,
                     self.patch_size,
+                    self.norm_strategy,
                     self.read_source_func,
                 )
             else:
@@ -171,12 +174,14 @@ class InMemoryDataset(Dataset):
                     self.inputs,
                     self.axes,
                     self.patch_size,
+                    self.norm_strategy,
                 )
             else:
                 return prepare_patches_unsupervised(
                     self.inputs,
                     self.axes,
                     self.patch_size,
+                    self.norm_strategy,
                     self.read_source_func,
                 )
 
