@@ -161,6 +161,7 @@ class InMemoryDataset(Dataset):
                     self.patch_size,
                     self.norm_strategy,
                     self.read_source_func,
+                    self.norm_strategy,
                 )
             else:
                 raise ValueError(
@@ -183,6 +184,7 @@ class InMemoryDataset(Dataset):
                     self.patch_size,
                     self.norm_strategy,
                     self.read_source_func,
+                    self.norm_strategy,
                 )
 
     def __len__(self) -> int:
