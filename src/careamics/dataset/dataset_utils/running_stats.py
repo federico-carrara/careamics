@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 
 def compute_normalization_stats(
     image: NDArray, 
-    strategy: Literal["channel_wise", "global"] = "channel_wise"
+    strategy: Literal["channel-wise", "global"] = "channel-wise"
 ) -> tuple[NDArray, NDArray]:
     """
     Compute mean and standard deviation of an array.
@@ -20,21 +20,26 @@ def compute_normalization_stats(
     ----------
     image : NDArray
         Input array.
-    norm_strategy : Literal["channel_wise", "global"]
-        Normalization strategy. Default is "channel_wise".
+    norm_strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
 
     Returns
     -------
     tuple of (list of floats, list of floats)
         Lists of mean and standard deviation values per channel.
     """
-    if strategy == "channel_wise":
+    if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(image.ndim), 1))
     elif strategy == "global":
         axes = np.arange(image.ndim)
     else:
-        raise ValueError(f"Unknown normalization strategy: {strategy}")
+        raise ValueError(
+            (
+                f"Unknown normalization strategy: {strategy}."
+                "Available ones are 'channel-wise' and 'global'."
+            )
+        )
     return np.mean(image, axis=axes), np.std(image, axis=axes)
 
 
