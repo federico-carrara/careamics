@@ -33,14 +33,14 @@ def compute_normalization_stats(
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(image.ndim), 1))
         stats = (
-            np.mean(image, axis=axes), 
-            np.std(image, axis=axes)
+            np.mean(image, axis=axes), # (C,)
+            np.std(image, axis=axes) # (C,)
         )
     elif strategy == "global":
         axes = tuple(np.arange(image.ndim))
         stats = (
-            np.mean(image, axis=axes, keepdims=True), 
-            np.std(image, axis=axes, keepdims=True)
+            np.asarray(np.mean(image, axis=axes))[None], # (1,) 
+            np.asarray(np.std(image, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(

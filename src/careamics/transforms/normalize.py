@@ -26,8 +26,18 @@ def _reshape_stats(stats: list[float], ndim: int) -> NDArray:
     NDArray
         Reshaped stats.
     """
-    return np.array(stats)[(..., *[np.newaxis] * (ndim - 1))]
-
+    arr = np.array(stats)
+    if arr.ndim == 1:
+        return arr[(..., *[np.newaxis] * (ndim - 1))]
+    elif arr.ndim == ndim:
+        return arr
+    elif arr.ndim <= ndim:
+        return arr[(..., *np.newaxis * (ndim - arr.ndim))]
+    else:
+        raise ValueError(
+            f"Stats array has too many dimensions ({arr.ndim}) compared to the image "
+            f"({ndim})."
+        )
 
 class Normalize(Transform):
     """
@@ -116,7 +126,7 @@ class Normalize(Transform):
         tuple of NDArray
             Transformed patch and target, the target can be returned as `None`.
         """
-        if len(self.image_means) != patch.shape[0]:
+        if self.strategy == "channel-wise" and len(self.image_means) != patch.shape[0]:
             raise ValueError(
                 f"Number of means (got a list of size {len(self.image_means)}) and "
                 f"number of channels (got shape {patch.shape} for C(Z)YX) do not match."
