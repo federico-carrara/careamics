@@ -129,16 +129,16 @@ def prepare_patches_supervised(
             f"{target_files}."
         )
 
-    image_means, image_stds = compute_normalization_stats(
-        np.concatenate(all_patches), norm_strategy
-    )
-    target_means, target_stds = compute_normalization_stats(
-        np.concatenate(all_targets), norm_strategy
-    )
-
     patch_array: np.ndarray = np.concatenate(all_patches, axis=0)
     target_array: np.ndarray = np.concatenate(all_targets, axis=0)
     logger.info(f"Extracted {patch_array.shape[0]} patches from input array.")
+    
+    image_means, image_stds = compute_normalization_stats(
+        patch_array, norm_strategy
+    )
+    target_means, target_stds = compute_normalization_stats(
+        target_array, norm_strategy
+    )
 
     return PatchedOutput(
         patch_array,
@@ -203,13 +203,13 @@ def prepare_patches_unsupervised(
     if num_samples == 0:
         raise ValueError(f"No valid samples found in the input data: {train_files}.")
 
-    image_means, image_stds = compute_normalization_stats(
-        np.concatenate(all_patches), norm_strategy
-    )
-
     patch_array: np.ndarray = np.concatenate(all_patches)
     logger.info(f"Extracted {patch_array.shape[0]} patches from input array.")
-
+    
+    image_means, image_stds = compute_normalization_stats(
+        patch_array, norm_strategy
+    )
+    
     return PatchedOutput(
         patch_array, None, Stats(image_means, image_stds), Stats((), ())
     )
