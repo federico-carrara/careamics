@@ -119,10 +119,12 @@ class InMemoryDataset(Dataset):
         self.patch_transform = Compose(
             transform_list=[
                 NormalizeModel(
+                    strategy=self.norm_strategy,
                     image_means=self.image_stats.means,
                     image_stds=self.image_stats.stds,
                     target_means=self.target_stats.means,
                     target_stds=self.target_stats.stds,
+                    
                 )
             ]
             + self.data_config.transforms,

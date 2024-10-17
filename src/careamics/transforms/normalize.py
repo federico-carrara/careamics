@@ -1,6 +1,6 @@
 """Normalization and denormalization transforms for image patches."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -68,6 +68,7 @@ class Normalize(Transform):
         image_stds: list[float],
         target_means: Optional[list[float]] = None,
         target_stds: Optional[list[float]] = None,
+        strategy: Literal["channel-wise", "global"] = "channel-wise",
     ):
         """Constructor.
 
@@ -81,11 +82,14 @@ class Normalize(Transform):
             Target mean value per channel, by default None.
         target_stds : list of float, optional
             Target standard deviation value per channel, by default None.
+        strategy : Literal["channel-wise", "global"], optional
+            Normalization strategy, by default "channel-wise".
         """
         self.image_means = image_means
         self.image_stds = image_stds
         self.target_means = target_means
         self.target_stds = target_stds
+        self.strategy = strategy
 
         self.eps = 1e-6
 
