@@ -182,7 +182,6 @@ class InMemoryDataset(Dataset):
                     self.inputs,
                     self.axes,
                     self.patch_size,
-                    self.norm_strategy,
                     self.read_source_func,
                     self.norm_strategy,
                 )
