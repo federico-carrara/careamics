@@ -28,11 +28,20 @@ def compute_normalization_stats(
     tuple of (list of floats, list of floats)
         Lists of mean and standard deviation values per channel.
     """
+    # TODO: this needs to be fixed a little bit
     if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(image.ndim), 1))
+        stats = (
+            np.mean(image, axis=axes), 
+            np.std(image, axis=axes)
+        )
     elif strategy == "global":
-        axes = np.arange(image.ndim)
+        axes = tuple(np.arange(image.ndim))
+        stats = (
+            np.mean(image, axis=axes, keepdims=True), 
+            np.std(image, axis=axes, keepdims=True)
+        )
     else:
         raise ValueError(
             (
@@ -40,7 +49,7 @@ def compute_normalization_stats(
                 "Available ones are 'channel-wise' and 'global'."
             )
         )
-    return np.mean(image, axis=axes), np.std(image, axis=axes)
+    return stats
 
 
 def update_iterative_stats(
