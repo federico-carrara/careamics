@@ -15,6 +15,7 @@ class LVAEModel(ArchitectureModel):
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
     architecture: Literal["LVAE"]
+    
     input_shape: int = Field(default=64, ge=8, le=1024)
     multiscale_count: int = Field(default=5)  # TODO clarify
     # 0 - off, len(z_dims) + 1 # TODO can/should be le to z_dims len + 1
@@ -146,25 +147,3 @@ class LVAEModel(ArchitectureModel):
         #         )
 
         return self
-
-    def set_3D(self, is_3D: bool) -> None:
-        """
-        Set 3D model by setting the `conv_dims` parameters.
-
-        Parameters
-        ----------
-        is_3D : bool
-            Whether the algorithm is 3D or not.
-        """
-        raise NotImplementedError("VAE is not implemented yet.")
-
-    def is_3D(self) -> bool:
-        """
-        Return whether the model is 3D or not.
-
-        Returns
-        -------
-        bool
-            Whether the model is 3D or not.
-        """
-        raise NotImplementedError("VAE is not implemented yet.")

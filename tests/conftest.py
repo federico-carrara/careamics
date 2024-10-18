@@ -129,6 +129,8 @@ def minimum_algorithm_musplit() -> dict:
         "likelihood": {
             "type": "GaussianLikelihoodConfig",
         },
+        "likelihood": {"type": "GaussianLikelihoodModel", "color_channels": 2},
+        "noise_model": {"type": "GaussianMixtureNoiseModel"},
     }
 
     return algorithm
