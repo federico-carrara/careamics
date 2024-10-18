@@ -5,7 +5,7 @@ The current implementation is based on "Interpretable Unsupervised Diversity Den
 """
 
 from collections.abc import Iterable
-from typing import Tuple, Union
+from typing import Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -14,6 +14,7 @@ import torch.nn as nn
 from careamics.config.architectures import register_model
 
 from ..activation import get_activation
+from .lambda_layers import SpectralMixer
 from .layers import (
     BottomUpDeterministicResBlock,
     BottomUpLayer,
@@ -38,13 +39,15 @@ class LadderVAE(nn.Module):
         nonlinearity: str,
         predict_logvar: bool,
         analytical_kl: bool,
+        fluorophores: Sequence[str]
     ):
         """
         Constructor.
 
         Parameters
         ----------
-
+        fluorophores : Sequence[str]
+            A sequence of the fluorophore names in the image to unmix.
         """
         super().__init__()
 
@@ -64,6 +67,15 @@ class LadderVAE(nn.Module):
         self.predict_logvar = predict_logvar
         self.analytical_kl = analytical_kl
         # -------------------------------------------------------
+        
+        
+        # -------------------------------------------------------
+        # Additional attributes λsplit
+        self.fluorophores = fluorophores
+        self.ref_learnable = False
+        self.num_bins = 32
+        # -------------------------------------------------------
+        
 
         # -------------------------------------------------------
         # Model attributes -> Hardcoded
@@ -162,6 +174,13 @@ class LadderVAE(nn.Module):
             kernel_size=3,
             padding="same",
             bias=self.topdown_conv2d_bias,
+        )
+        
+        # Mixing layer to reconstruct spectrum
+        self.mixer = SpectralMixer(
+            flurophores=self.fluorophores,
+            ref_learnable=self.ref_learnable,
+            num_bins=self.num_bins
         )
 
         # msg =f'[{self.__class__.__name__}] Stoc:{not self.non_stochastic_version} RecMode:{self.reconstruction_mode} TethInput:{self._tethered_to_input}'
@@ -650,6 +669,15 @@ class LadderVAE(nn.Module):
         ----------
         x: torch.Tensor
             The input tensor of shape (B, C, H, W).
+            
+        Returns
+        -------
+        remixed: torch.Tensor
+            The remixed spectral image. Shape is (B, C, H, W), C = # spectral channels. 
+        out: torch.Tensor
+            The unmixed images output of the model. Shape is (B, F, H, W), F = # flurophores.
+        td_data: dict[str, torch.Tensor]
+            Additional data from the top-down pass (e.g., latents, KL values).
         """
         # Bottom-up inference: return list of length n_layers (bottom to top)
         bu_values = self.bottomup_pass(x)
@@ -662,7 +690,10 @@ class LadderVAE(nn.Module):
         # Top-down inference/generation
         out, td_data = self.topdown_pass(bu_values, mode_layers=mode_layers)
         out = self.output_layer(out)
-        return out, td_data
+        
+        # Re-mixing
+        remixed = self.mixer(out)
+        return remixed, out, td_data
 
     def reset_for_different_output_size(self, output_size: int) -> None:
         """Reset shape of output and latent tensors for different output size.
