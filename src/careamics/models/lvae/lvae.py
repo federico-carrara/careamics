@@ -39,7 +39,8 @@ class LadderVAE(nn.Module):
         nonlinearity: str,
         predict_logvar: bool,
         analytical_kl: bool,
-        fluorophores: Sequence[str]
+        fluorophores: Sequence[str],
+        **kwargs,
     ):
         """
         Constructor.
@@ -72,8 +73,8 @@ class LadderVAE(nn.Module):
         # -------------------------------------------------------
         # Additional attributes λsplit
         self.fluorophores = fluorophores
-        self.ref_learnable = False
-        self.num_bins = 32
+        self.ref_learnable = kwargs.get("ref_learnable", False)
+        self.num_bins = kwargs.get("num_bins", 32)
         # -------------------------------------------------------
         
 

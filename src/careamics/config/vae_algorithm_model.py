@@ -10,7 +10,7 @@ from typing_extensions import Self
 
 from careamics.config.support import SupportedAlgorithm, SupportedLoss
 
-from .architectures import CustomModel, LVAEModel
+from .architectures import CustomModel, LVAEModel, LambdaSplitConfig
 from .likelihood_model import GaussianLikelihoodConfig, NMLikelihoodConfig
 from .nm_model import MultiChannelNMConfig
 from .optimizer_models import LrSchedulerModel, OptimizerModel
@@ -39,7 +39,9 @@ class VAEAlgorithmConfig(BaseModel):
     #   - values can still be passed as strings and they will be cast to Enum
     algorithm: Literal["musplit", "denoisplit"]
     loss: Literal["musplit", "denoisplit", "denoisplit_musplit"]
-    model: Union[LVAEModel, CustomModel] = Field(discriminator="architecture")
+    model: Union[LVAEModel, LambdaSplitConfig, CustomModel] = Field(
+        discriminator="architecture"
+    )
 
     # TODO: these are configs, change naming of attrs
     noise_model: Optional[MultiChannelNMConfig] = None
