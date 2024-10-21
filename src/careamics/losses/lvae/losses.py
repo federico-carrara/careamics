@@ -295,7 +295,7 @@ def musplit_loss(
     """
     assert gaussian_likelihood is not None
 
-    predictions, td_data = model_outputs
+    predictions, _, td_data = model_outputs
 
     # Reconstruction loss computation
     recons_loss = config.reconstruction_weight * get_reconstruction_loss(
@@ -314,11 +314,8 @@ def musplit_loss(
         config.kl_weight,
         config.kl_params.current_epoch,
     )
-    kl_loss = (
-        _get_kl_divergence_loss_musplit(
-            topdown_data=td_data, img_shape=targets.shape[2:]
-        )
-        * kl_weight
+    kl_loss = kl_weight * _get_kl_divergence_loss_musplit(
+        topdown_data=td_data, img_shape=targets.shape[2:]
     )
 
     net_loss = recons_loss + kl_loss
@@ -370,7 +367,7 @@ def denoisplit_loss(
     """
     assert noise_model_likelihood is not None
 
-    predictions, td_data = model_outputs
+    predictions, _, td_data = model_outputs
 
     # Reconstruction loss computation
     recons_loss = config.reconstruction_weight * get_reconstruction_loss(
@@ -389,11 +386,8 @@ def denoisplit_loss(
         config.kl_weight,
         config.kl_params.current_epoch,
     )
-    kl_loss = (
-        _get_kl_divergence_loss_denoisplit(
-            topdown_data=td_data, img_shape=targets.shape[2:]
-        )
-        * kl_weight
+    kl_loss = kl_weight * _get_kl_divergence_loss_denoisplit(
+        topdown_data=td_data, img_shape=targets.shape[2:]
     )
 
     net_loss = recons_loss + kl_loss
@@ -443,7 +437,7 @@ def denoisplit_musplit_loss(
         A dictionary containing the overall loss `["loss"]`, the reconstruction loss
         `["reconstruction_loss"]`, and the KL divergence loss `["kl_loss"]`.
     """
-    predictions, td_data = model_outputs
+    predictions, _, td_data = model_outputs
 
     # Reconstruction loss computation
     recons_loss = _reconstruction_loss_musplit_denoisplit(
@@ -494,7 +488,9 @@ def denoisplit_musplit_loss(
 def lambdasplit_loss(
     model_outputs: tuple[torch.Tensor, dict[str, Any]],
     targets: torch.Tensor,
-    loss_parameters: LVAELossParameters,
+    config: LVAELossConfig,
+    gaussian_likelihood: GaussianLikelihood,
+    noise_model_likelihood: Optional[NoiseModelLikelihood] = None,
 ) -> Optional[dict[str, torch.Tensor]]:
     """Loss function for muSplit.
 
@@ -507,9 +503,12 @@ def lambdasplit_loss(
     targets : torch.Tensor
         The target image used to compute the reconstruction loss. Shape is
         (B, F, [Z], Y, X).
-    loss_parameters : LVAELossParameters
-        The loss parameters for muSplit (e.g., KL hyperparameters, likelihood module,
-        noise model, etc.).
+    config : LVAELossConfig
+        The config for loss function containing all loss hyperparameters.
+    gaussian_likelihood : GaussianLikelihood
+        The Gaussian likelihood object.
+    noise_model_likelihood : NoiseModelLikelihood
+        The noise model likelihood object.
 
     Returns
     -------
@@ -517,33 +516,30 @@ def lambdasplit_loss(
         A dictionary containing the overall loss `["loss"]`, the reconstruction loss
         `["reconstruction_loss"]`, and the KL divergence loss `["kl_loss"]`.
     """
-    predictions, td_data = model_outputs
+    predictions, _, td_data = model_outputs
 
     # Reconstruction loss computation
-    recons_loss = (
-        get_reconstruction_loss(
-            reconstruction=predictions,
-            target=targets,
-            likelihood_obj=loss_parameters.gaussian_likelihood,
-        )
-        * loss_parameters.reconstruction_weight
+    recons_loss = config.reconstruction_weight * get_reconstruction_loss(
+        reconstruction=predictions,
+        target=targets,
+        likelihood_obj=gaussian_likelihood,
     )
     if torch.isnan(recons_loss).any():
         recons_loss = 0.0
 
     # KL loss computation
     kl_weight = get_kl_weight(
-        loss_parameters.kl_annealing,
-        loss_parameters.kl_start,
-        loss_parameters.kl_annealtime,
-        loss_parameters.kl_weight,
-        loss_parameters.current_epoch,
+        config.kl_params.annealing,
+        config.kl_params.start,
+        config.kl_params.annealtime,
+        config.kl_weight,
+        config.kl_params.current_epoch,
     )
     kl_loss = get_kl_divergence_loss(
         topdown_data=td_data, 
-        rescaling=loss_parameters.kl_rescaling,
-        aggregation=loss_parameters.kl_aggregation,
-        free_bits_coeff=loss_parameters.kl_free_bits_coeff,
+        rescaling=config.kl_params.rescaling,
+        aggregation=config.kl_params.aggregation,
+        free_bits_coeff=config.kl_params.free_bits_coeff,
         img_shape=targets.shape[2:]
     ) * kl_weight
 

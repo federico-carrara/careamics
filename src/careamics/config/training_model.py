@@ -36,6 +36,8 @@ class TrainingConfig(BaseModel):
     """Learning rate."""
     lr_scheduler_patience: int = Field(default=10, ge=1)
     """Patience for the learning rate scheduler."""
+    earlystop_patience: int = Field(default=20, ge=1)
+    """Patience for the early stopping callback."""
     precision: Literal["64", "32", "16-mixed", "bf16-mixed"] = Field(default="32")
     """Numerical precision"""
     max_steps: int = Field(default=-1, ge=-1)

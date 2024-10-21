@@ -111,6 +111,7 @@ class DataConfig(BaseModel):
     """Normalization strategy, either channel-wise or global. It is particularly
     important in the case of multi-channel data."""
     
+    # TODO: list of floats instead of array for serialization?
     image_means: Optional[list[Float]] = Field(
         default=None, min_length=0, max_length=32
     )

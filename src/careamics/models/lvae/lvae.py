@@ -74,7 +74,7 @@ class LadderVAE(nn.Module):
         # Additional attributes λsplit
         self.fluorophores = fluorophores
         self.ref_learnable = kwargs.get("ref_learnable", False)
-        self.num_bins = kwargs.get("num_bins", 32)
+        self.in_channels = kwargs.get("num_bins", 1)
         # -------------------------------------------------------
         
 
@@ -118,7 +118,6 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Data attributes
-        self.color_ch = 1
         self.img_shape = (self.image_size, self.image_size)
         self.normalized_input = True
         # -------------------------------------------------------
@@ -181,9 +180,9 @@ class LadderVAE(nn.Module):
         self.mixer = SpectralMixer(
             flurophores=self.fluorophores,
             ref_learnable=self.ref_learnable,
-            num_bins=self.num_bins
-        )
-
+            num_bins=self.in_channels,
+        ) if self.fluorophores else nn.Identity() # TODO: ugly!!!
+        
         # msg =f'[{self.__class__.__name__}] Stoc:{not self.non_stochastic_version} RecMode:{self.reconstruction_mode} TethInput:{self._tethered_to_input}'
         # msg += f' TargetCh: {self.target_ch}'
         # print(msg)
@@ -209,7 +208,7 @@ class LadderVAE(nn.Module):
         """
         nonlin = get_activation(self.nonlin)
         conv_block = nn.Conv2d(
-            in_channels=self.color_ch,
+            in_channels=self.in_channels,
             out_channels=self.encoder_n_filters,
             kernel_size=self.encoder_res_block_kernel,
             padding=self.encoder_res_block_kernel // 2,
@@ -425,15 +424,15 @@ class LadderVAE(nn.Module):
 
         msg = (
             "Multiscale approach only supports monocrome images. "
-            f"Found instead color_ch={self.color_ch}."
+            f"Found instead in_channels={self.in_channels}."
         )
-        assert self._multiscale_count == 1 or self.color_ch == 1, msg
+        assert self._multiscale_count == 1 or self.in_channels == 1, msg
 
         lowres_first_bottom_ups = []
         for _ in range(1, self._multiscale_count):
             first_bottom_up = nn.Sequential(
                 nn.Conv2d(
-                    in_channels=self.color_ch,
+                    in_channels=self.in_channels,
                     out_channels=self.encoder_n_filters,
                     kernel_size=5,
                     padding="same",
