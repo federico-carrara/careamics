@@ -6,6 +6,7 @@ This module contains a factory function for creating loss functions.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Literal, Optional, Union
 
@@ -13,21 +14,13 @@ from torch import Tensor as tensor
 
 from ..config.support import SupportedLoss
 from .fcn.losses import mae_loss, mse_loss, n2v_loss
-from .lvae.losses import (
-    denoisplit_loss, denoisplit_musplit_loss, lambdasplit_loss, musplit_loss
-)
+from .lvae.losses import denoisplit_loss, denoisplit_musplit_loss, musplit_loss
 
 if TYPE_CHECKING:
     from careamics.models.lvae.likelihoods import (
         GaussianLikelihood,
         NoiseModelLikelihood,
     )
-    from careamics.models.lvae.noise_models import (
-        GaussianMixtureNoiseModel,
-        MultiChannelNoiseModel,
-    )
-
-    NoiseModel = Union[GaussianMixtureNoiseModel, MultiChannelNoiseModel]
 
 
 @dataclass
@@ -66,7 +59,7 @@ class LVAELossParameters:
     """Weight for the muSplit loss (used in the muSplit-denoiSplit loss)."""
     denoisplit_weight: float = 0.9
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
-    
+
     # KL params
     kl_type: Literal["kl", "kl_restricted", "kl_spatial", "kl_channelwise"] = "kl"
     """Type of KL divergence used as KL loss."""
@@ -84,6 +77,14 @@ class LVAELossParameters:
     """Number of epochs for which KL loss annealing is applied."""
     non_stochastic: bool = False
     """Whether to sample latents and compute KL."""
+
+    def __post_init__(self):
+        """Raise a deprecation warning."""
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated. Please use`LVAELossConfig`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 def loss_parameters_factory(
@@ -158,9 +159,6 @@ def loss_factory(loss: Union[SupportedLoss, str]) -> Callable:
 
     elif loss == SupportedLoss.DENOISPLIT_MUSPLIT:
         return denoisplit_musplit_loss
-
-    elif loss == SupportedLoss.LAMBDASPLIT:
-        raise lambdasplit_loss
 
     else:
         raise NotImplementedError(f"Loss {loss} is not yet supported.")
