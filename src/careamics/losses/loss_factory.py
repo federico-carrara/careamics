@@ -14,7 +14,9 @@ from torch import Tensor as tensor
 
 from ..config.support import SupportedLoss
 from .fcn.losses import mae_loss, mse_loss, n2v_loss
-from .lvae.losses import denoisplit_loss, denoisplit_musplit_loss, musplit_loss
+from .lvae.losses import (
+    denoisplit_loss, denoisplit_musplit_loss, lambdasplit_loss, musplit_loss
+)
 
 if TYPE_CHECKING:
     from careamics.models.lvae.likelihoods import (
@@ -159,6 +161,9 @@ def loss_factory(loss: Union[SupportedLoss, str]) -> Callable:
 
     elif loss == SupportedLoss.DENOISPLIT_MUSPLIT:
         return denoisplit_musplit_loss
+    
+    elif loss == SupportedLoss.LAMBDASPLIT:
+        return lambdasplit_loss
 
     else:
         raise NotImplementedError(f"Loss {loss} is not yet supported.")

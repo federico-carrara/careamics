@@ -32,7 +32,10 @@ class TrainingConfig(BaseModel):
 
     num_epochs: int = Field(default=20, ge=1)
     """Number of epochs, greater than 0."""
-
+    lr: float = Field(default=1e-3, gt=1e-8)
+    """Learning rate."""
+    lr_scheduler_patience: int = Field(default=10, ge=1)
+    """Patience for the learning rate scheduler."""
     precision: Literal["64", "32", "16-mixed", "bf16-mixed"] = Field(default="32")
     """Numerical precision"""
     max_steps: int = Field(default=-1, ge=-1)

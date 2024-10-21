@@ -38,7 +38,7 @@ class VAEAlgorithmConfig(BaseModel):
     # defined in SupportedAlgorithm
     # TODO: Use supported Enum classes for typing?
     #   - values can still be passed as strings and they will be cast to Enum
-    algorithm: Literal["musplit", "denoisplit"]
+    algorithm: Literal["musplit", "denoisplit", "lambdasplit"]
 
     # NOTE: these are all configs (pydantic models)
     loss: LVAELossConfig
