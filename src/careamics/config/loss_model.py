@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class KLLossConfig(BaseModel):
@@ -35,7 +35,7 @@ class LVAELossConfig(BaseModel):
         validate_assignment=True, validate_default=True, arbitrary_types_allowed=True
     )
 
-    loss_type: Literal["musplit", "denoisplit", "denoisplit_musplit"]
+    loss_type: Literal["musplit", "denoisplit", "denoisplit_musplit", "lambdasplit"]
     """Type of loss to use for LVAE."""
 
     reconstruction_weight: float = 1.0
@@ -49,7 +49,7 @@ class LVAELossConfig(BaseModel):
     denoisplit_weight: float = 0.9
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
 
-    kl_params: KLLossConfig = KLLossConfig()
+    kl_params: KLLossConfig = Field(default_factory=KLLossConfig)
     """KL loss configuration."""
 
     # TODO: remove?

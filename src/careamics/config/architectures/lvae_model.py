@@ -8,7 +8,6 @@ from typing_extensions import Self
 from .architecture_model import ArchitectureModel
 
 
-# TODO: it is quite confusing to call this LVAEModel, as it is basically a config
 class LVAEModel(ArchitectureModel):
     """LVAE model."""
 
@@ -30,12 +29,17 @@ class LVAEModel(ArchitectureModel):
     ] = Field(
         default="ELU",
     )
-
     predict_logvar: Literal[None, "pixelwise"] = None
-
-    analytical_kl: bool = Field(
-        default=False,
-    )
+    analytical_kl: bool = Field(default=False)
+    
+    # λSplit parameters
+    fluorophores: list[str]
+    """A list of the fluorophore names in the image to unmix."""
+    ref_learnable: bool = Field(default=False)
+    """Whether the reference spectra matrix is learnable."""
+    num_bins: int = Field(default=32)
+    """Number of bins for the spectral data."""
+    
 
     @field_validator("encoder_n_filters")
     @classmethod

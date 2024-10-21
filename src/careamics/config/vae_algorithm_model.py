@@ -42,7 +42,9 @@ class VAEAlgorithmConfig(BaseModel):
 
     # NOTE: these are all configs (pydantic models)
     loss: LVAELossConfig
-    model: Union[LVAEModel, CustomModel] = Field(discriminator="architecture")
+    model: Union[LVAEModel, CustomModel] = Field(
+        discriminator="architecture"
+    )
     noise_model: Optional[MultiChannelNMConfig] = None
     noise_model_likelihood: Optional[NMLikelihoodConfig] = None
     gaussian_likelihood: Optional[GaussianLikelihoodConfig] = None
