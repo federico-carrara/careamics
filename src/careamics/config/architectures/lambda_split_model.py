@@ -15,7 +15,7 @@ class LambdaSplitConfig(LVAEModel):
     
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
     
-    architecture: Literal["lambdaSplit"] = Field(default="lambdaSplit")
+    architecture: Literal["lambdasplit"] = Field(default="lambdasplit")
     
     fluorophores: list[str]
     """A list of the fluorophore names in the image to unmix."""
