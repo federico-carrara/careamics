@@ -5,7 +5,7 @@ The current implementation is based on "Interpretable Unsupervised Diversity Den
 """
 
 from collections.abc import Iterable
-from typing import Sequence, Tuple, Union
+from typing import Literal, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -21,13 +21,14 @@ from .layers import (
     TopDownDeterministicResBlock,
     TopDownLayer,
 )
-from .utils import Interpolate, ModelType
+from .utils import Interpolate
 
 
 @register_model("LVAE")
 class LadderVAE(nn.Module):
     def __init__(
         self,
+        algorithm_type: Literal["supervised", "unsupervised"],
         input_shape: int,
         output_channels: int,
         multiscale_count: int,
@@ -54,9 +55,8 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Customizable attributes
-        self.image_size = (
-            input_shape  # TODO: in the 3D case we'd like to accept also a tuple
-        )
+        self.algorithm_type = algorithm_type
+        self.image_size = input_shape
         self.target_ch = output_channels
         self._multiscale_count = multiscale_count
         self.z_dims = z_dims
@@ -80,7 +80,6 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Model attributes -> Hardcoded
-        self.model_type = ModelType.LadderVae  # TODO remove !
         self.encoder_blocks_per_layer = 1
         self.decoder_blocks_per_layer = 1
         self.bottomup_batchnorm = True

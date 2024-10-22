@@ -14,6 +14,10 @@ class LVAEModel(ArchitectureModel):
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
     architecture: Literal["LVAE"]
+    algorithm_type: Literal["supervised", "unsupervised"]
+    """Whether the algorithm is supervised or unsupervised.
+    We have: HDN -> unsupervised, μSplit -> supervised, denoiSplit -> supervised,
+    λSplit -> unsupervised."""
     
     input_shape: int = Field(default=64, ge=8, le=1024)
     multiscale_count: int = Field(default=5)  # TODO clarify
