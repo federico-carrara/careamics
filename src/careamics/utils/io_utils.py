@@ -7,6 +7,7 @@ import os
 from typing import Any, Literal, Union
 
 import git
+import torch
 
 
 def get_new_model_version(model_dir: Union[Path, str]) -> int:
@@ -93,6 +94,34 @@ def get_model_checkpoint(
                 output.append(fpath)
     assert len(output) == 1, '\n'.join(output)
     return output[0]
+
+
+def load_model_checkpoint(
+    ckpt_dir: str, 
+    mode: Literal['best', 'last'] = 'best'
+) -> dict[str, Any]:
+    """Load a model checkpoint.
+    
+    Parameters
+    ----------
+    ckpt_path : str
+        Checkpoint path.
+    mode : Literal['best', 'last'], optional
+        Mode to get the checkpoint, by default 'best'.
+    
+    Returns
+    -------
+    dict[str, Any]
+        Model checkpoint.
+    """
+    if os.path.isdir(ckpt_dir):
+        ckpt_fpath = get_model_checkpoint(ckpt_dir, mode=mode)
+    else:
+        assert os.path.isfile(ckpt_dir)
+        ckpt_fpath = ckpt_dir
+
+    print(f"Loading checkpoint from: '{ckpt_fpath}'")
+    return torch.load(ckpt_fpath)
 
 
 def load_file(file_path: str):
