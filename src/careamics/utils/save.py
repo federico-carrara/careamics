@@ -30,6 +30,8 @@ def get_workdir(
 
     It has the following structure: "root_dir/YYMM/model_name/version".
     """
+    os.makedirs(root_dir, exist_ok=True)
+    
     rel_path = datetime.now().strftime("%y%m")
     cur_workdir = os.path.join(root_dir, rel_path)
     Path(cur_workdir).mkdir(exist_ok=True)
