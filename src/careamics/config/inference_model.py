@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
 
+from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
@@ -31,10 +32,10 @@ class InferenceConfig(BaseModel):
     axes: str
     """Data axes (TSCZYX) in the order of the input data."""
 
-    image_means: list = Field(..., min_length=0, max_length=32)
+    image_means: Optional[list] = Field(..., min_length=0, max_length=32)
     """Mean values for each input channel."""
 
-    image_stds: list = Field(..., min_length=0, max_length=32)
+    image_stds: Optional[list] = Field(..., min_length=0, max_length=32)
     """Standard deviation values for each input channel."""
 
     # TODO only default TTAs are supported for now
@@ -237,3 +238,44 @@ class InferenceConfig(BaseModel):
             Tile overlap.
         """
         self._update(axes=axes, tile_size=tile_size, tile_overlap=tile_overlap)
+        
+    def set_means_and_stds(
+        self,
+        image_means: Union[NDArray, tuple, list, None],
+        image_stds: Union[NDArray, tuple, list, None],
+        target_means: Optional[Union[NDArray, tuple, list, None]] = None,
+        target_stds: Optional[Union[NDArray, tuple, list, None]] = None,
+    ) -> None:
+        """
+        Set mean and standard deviation of the data across channels.
+
+        This method should be used instead setting the fields directly, as it would
+        otherwise trigger a validation error.
+
+        Parameters
+        ----------
+        image_means : numpy.ndarray, tuple or list
+            Mean values for normalization.
+        image_stds : numpy.ndarray, tuple or list
+            Standard deviation values for normalization.
+        target_means : numpy.ndarray, tuple or list, optional
+            Target mean values for normalization, by default ().
+        target_stds : numpy.ndarray, tuple or list, optional
+            Target standard deviation values for normalization, by default ().
+        """
+        # make sure we pass a list
+        if image_means is not None:
+            image_means = list(image_means)
+        if image_stds is not None:
+            image_stds = list(image_stds)
+        if target_means is not None:
+            target_means = list(target_means)
+        if target_stds is not None:
+            target_stds = list(target_stds)
+
+        self._update(
+            image_means=image_means,
+            image_stds=image_stds,
+            target_means=target_means,
+            target_stds=target_stds,
+        )
