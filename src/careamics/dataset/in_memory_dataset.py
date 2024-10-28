@@ -81,6 +81,9 @@ class InMemoryDataset(Dataset):
 
         # generate patches
         supervised = self.input_targets is not None
+        # TODO: might be useful to decopule the patching from the dataset
+        # loading, e.g., in the case some preprocessing is needed on the 
+        # full image.
         patches_data = self._prepare_patches(supervised)
 
         # unpack the dataclass

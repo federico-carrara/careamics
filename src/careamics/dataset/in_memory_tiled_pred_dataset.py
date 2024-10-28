@@ -28,7 +28,7 @@ class InMemoryTiledPredDataset(Dataset):
     def __init__(
         self,
         prediction_config: InferenceConfig,
-        inputs: NDArray,
+        inputs: NDArray, # TODO: add option to load from file
     ) -> None:
         """Constructor.
 
@@ -62,6 +62,7 @@ class InMemoryTiledPredDataset(Dataset):
         self.image_stds = self.pred_config.image_stds
 
         # Generate patches
+        # TODO: this is just unsupervised, need to add targets
         self.data = self._prepare_tiles()
 
         # get transforms
