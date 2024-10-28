@@ -8,6 +8,8 @@ from matplotlib.animation import FuncAnimation
 from numpy.typing import NDArray
 import torch
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 
 def _get_animation(img: NDArray, axis: int) -> FuncAnimation:
     """Get the matplotlib animation.
@@ -108,3 +110,47 @@ def intensity_histograms(
         print(f"FP#{i+1}: mean: {mean:.2f}, std: {std:.2f}, 50%: {qtiles[0]:.2f}, 75%: {qtiles[1]:.2f}, 95%: {qtiles[2]:.2f}, 99%: {qtiles[3]:.2f}")
 
     plt.show()
+
+
+def _add_colorbar(img: torch.Tensor, fig, ax):
+    """Add colorbar to a `matplotlib` image."""
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    fig.colorbar(img, cax=cax)
+
+
+def plot_splitting_results(
+    preds: torch.Tensor,
+    preds_std: torch.Tensor,
+    gt: torch.Tensor,
+    idx: Optional[int] = None
+) -> None:
+    """Plot a predicted image with the associated MMSE std deviation and GT.
+    
+    Parameters
+    ----------
+    preds : torch.Tensor
+        The predicted image.
+    preds_std : torch.Tensor
+        The predicted std deviation.
+    gt : torch.Tensor
+        The ground truth image.
+    idx : Optional[int], optional
+        The index of the image to plot, by default None.
+    """
+    N, F = preds.shape[0], preds.shape[1]
+    
+    if idx is None:
+        idx = np.random.randint(0, N - 1)
+    
+    fig, axes = plt.subplots(3, F, figsize=(6*F, 15))
+    for i in range(F):
+        axes[0, i].set_title(f"FP {i+1} - GT")
+        im_gt = axes[0, i].imshow(gt[idx, i])
+        _add_colorbar(im_gt, fig, axes[0, i])
+        axes[1, i].set_title(f"FP {i+1} - Pred")
+        im_pred = axes[1, i].imshow(preds[idx, i])
+        _add_colorbar(im_pred, fig, axes[1, i])
+        axes[2, i].set_title(f"FP {i+1} - Pred Std")
+        im_std = axes[2, i].imshow(preds_std[idx, i])
+        _add_colorbar(im_std, fig, axes[2, i])
