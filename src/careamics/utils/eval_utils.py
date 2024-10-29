@@ -11,7 +11,7 @@ def get_tiled_predictions(
     model: VAEModule,
     dloader: DataLoader,
     mmse_count: int = 1
-) -> tuple[list[np.ndarray], list[np.ndarray], list[TileInformation]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[TileInformation]]:
     """Get tiled predictions from a model for the entire dataset.
 
     Parameters
@@ -26,14 +26,16 @@ def get_tiled_predictions(
 
     Returns
     -------
-    tuple[list[np.ndarray], list[np.ndarray], list[TileInformation]]
+    tuple[np.ndarray, np.ndarray, np.ndarray, list[TileInformation]]
         Tuple containing:
-            - predictions: Predicted images for the dataset.
-            - predictions_std: Standard deviation of the predicted images.
-            - tiles_info: Information about the tiles coordinates.
+            - predictions: Predicted unmixed images for the dataset. Shape is (N, F, H, W).
+            - predictions_std: Standard deviation of the predicted unmixed images. Shape is (N, F, H, W).
+            - reconstructions: Reconstructed (spectral) images. Shape is (N, C, H, W).
+            - tiles_info: Information about the tiles coordinates. Length is N.
     """
     predictions = []
     predictions_std = []
+    reconstructions = []
     tiles_info = []
     with torch.no_grad():
         for batch in tqdm(dloader, desc="Predicting patches"):
@@ -42,21 +44,32 @@ def get_tiled_predictions(
             tiles_info.extend(tinfo)
 
             rec_img_list = []
+            unmix_img_list = []
             for _ in range(mmse_count):
-                _, out, _ = model(inp)
+                rec, unmix, _ = model(inp)
                 
                 if model.model.predict_logvar is None:
-                    rec_img = out
+                    unmix_img = unmix
+                    rec_img = rec
                     logvar = torch.tensor([-1])
                 else:
-                    rec_img, logvar = torch.chunk(out, chunks=2, dim=1)
+                    unmix_img, _ = torch.chunk(unmix, chunks=2, dim=1)
+                    rec_img, logvar = torch.chunk(rec, chunks=2, dim=1)
+                
+                unmix_img_list.append(unmix_img.cpu().unsqueeze(0)) # add MMSE dim
                 rec_img_list.append(rec_img.cpu().unsqueeze(0)) # add MMSE dim
 
             # aggregate results
-            samples = torch.cat(rec_img_list, dim=0)
-            mmse_imgs = torch.mean(samples, dim=0)
-            mmse_std = torch.std(samples, dim=0)
-            predictions.append(mmse_imgs.cpu().numpy())
-            predictions_std.append(mmse_std.cpu().numpy())
+            unmixs = torch.cat(unmix_img_list, dim=0)
+            unmix_mmse_imgs = torch.mean(unmixs, dim=0)
+            unmix_mmse_std = torch.std(unmixs, dim=0)
+            predictions.append(unmix_mmse_imgs.cpu().numpy())
+            predictions_std.append(unmix_mmse_std.cpu().numpy())
+            recs = torch.cat(rec_img_list, dim=0)
+            rec_msse_imgs = torch.mean(recs, dim=0)
+            reconstructions.append(rec_msse_imgs.cpu().numpy())
 
-    return np.concatenate(predictions), np.concatenate(predictions_std), tiles_info
+    predictions = np.concatenate(predictions)
+    predictions_std = np.concatenate(predictions_std)
+    reconstructions = np.concatenate(reconstructions)
+    return predictions, predictions_std, reconstructions, tiles_info
