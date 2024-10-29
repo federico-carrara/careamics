@@ -9,68 +9,92 @@ from numpy.typing import NDArray
 import torch
 import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-
-def _get_animation(img: NDArray, axis: int) -> FuncAnimation:
-    """Get the matplotlib animation.
+        
+        
+def _get_animation(
+    imgs: list[np.ndarray], 
+    axis: int,
+    titles: Optional[list[str]] = None
+) -> FuncAnimation:
+    """Get the matplotlib animation for multiple images.
 
     Parameters
     ----------
-    img : NDArray
-        Image to plot. Shape must be 3D.
+    imgs : Union[np.ndarray, List[np.ndarray]]
+        A 3D image array or a list of 3D image arrays to plot.
     axis : int
-        Axis to scroll through.
+        Axis to scroll through, common to all images.
+    titles: Optional[list[str]]
+        Titles for each image. Default is `None`.
 
     Returns
     -------
     FuncAnimation
         Matplotlib animation.
     """
-    assert img.ndim == 3, "Image must be 3D."
-    assert axis < img.ndim, "Scroll axis out of range."
+    if isinstance(imgs, np.ndarray):
+        imgs = [imgs]
+    
+    assert all(img.ndim == 3 for img in imgs), "Each image must be 3D."
+    assert all(img.shape == imgs[0].shape for img in imgs), "All images must have the same shape."
+    assert axis < imgs[0].ndim, "Scroll axis out of range."
     
     plt.rcParams["animation.html"] = "jshtml"
 
-    fig, ax = plt.subplots()
+    num_images = len(imgs)
+    fig, axs = plt.subplots(1, num_images, figsize=(5 * num_images, 5))
     
-    slices = [slice(None)] * img.ndim
+    # Ensure axs is iterable when there's only one subplot
+    if num_images == 1:
+        axs = [axs]
+
+    slices = [slice(None)] * imgs[0].ndim
     slices[axis] = 0
-    im = ax.imshow(img[tuple(slices)])
+    
+    ims = []
+    for img, ax in zip(imgs, axs):
+        ax.set_title(titles.pop(0) if titles else "")
+        im = ax.imshow(img[tuple(slices)])
+        ims.append(im)
         
-    # update function that defines the matplotlib animation
+    # Update function for all images
     def update(frame: int):
         slices[axis] = frame
-        im.set_array(img[tuple(slices)])
-        return [im]
+        for im, img in zip(ims, imgs):
+            im.set_array(img[tuple(slices)])
+        return ims
 
-    return FuncAnimation(
-        fig, update, frames=img.shape[axis], interval=200
-    )
+    return FuncAnimation(fig, update, frames=imgs[0].shape[axis], interval=200)
 
 
-def view3D(img: NDArray, axis: int, jupyter: bool) -> Optional[HTML]:
-    """View 3D image.
+def view3D(
+    imgs: list[np.ndarray],
+    titles: Optional[list[str]] = None,
+    axis: Optional[int] = 0, 
+    jupyter: Optional[bool] = True
+) -> Optional[HTML]:
+    """View one or multiple 3D images.
 
     Parameters
     ----------
-    img : NDArray
-        Image to plot. Shape must be 3D.
-    axis : int
-        Axis to scroll through.
-    jupyter : bool
-        Whether to display in a Jupyter Notebook.
-        
+    imgs : List[np.ndarray]
+        List of 3D images to plot. Each image must have the same shape.
+    axis : Optional[int]
+        Axis to scroll through. Default is 0.
+    jupyter : Optional[bool]
+        Whether to display in a Jupyter Notebook. Default is True.
+
     Returns
     -------
     Optional[HTML]
         HTML animation if in Jupyter Notebook, else `None`.
     """
-    anim = _get_animation(img, axis)
+    anim = _get_animation(imgs, axis, titles)
     if jupyter:
         return HTML(anim.to_jshtml())
     else:    
         plt.show()
-        
+
 
 def intensity_histograms(
     imgs: torch.Tensor,
