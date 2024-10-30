@@ -73,3 +73,36 @@ def get_tiled_predictions(
     predictions_std = np.concatenate(predictions_std)
     reconstructions = np.concatenate(reconstructions)
     return predictions, predictions_std, reconstructions, tiles_info
+
+
+def coarsen_img(
+    img: np.ndarray, 
+    downscaling_factor: int
+) -> np.ndarray:
+    """Coarsen an image by summing over blocks of pixels.
+    
+    Parameters
+    ----------
+    img : np.ndarray
+        Image to coarsen. Shape is (C, Z, Y, X) or (C, Y, X).
+    downscaling_factor : int
+        Factor by which to downscale the image.
+    """
+    
+    assert isinstance(downscaling_factor, int), "Downscaling factor must be a single int!"
+    
+    if img.ndim == 4:
+        C, Z, Y, X = img.shape
+        return img.reshape(
+            C, 
+            Z // downscaling_factor, downscaling_factor, 
+            Y // downscaling_factor, downscaling_factor, 
+            X // downscaling_factor, downscaling_factor
+        ).sum(axis=(2, 4, 6))
+    elif img.ndim == 3:
+        C, Y, X = img.shape
+        return img.reshape(
+            C,
+            Y // downscaling_factor, downscaling_factor, 
+            X // downscaling_factor, downscaling_factor
+        ).sum(axis=(2, 4))

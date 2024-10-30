@@ -2,7 +2,7 @@
 
 import warnings
 from functools import cached_property
-from typing import Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 import torch
@@ -125,39 +125,48 @@ class Spectrum(BaseModel):
         remainder = range_ % num_bins
         bins = [interval[0]]
         for i in range(num_bins):
-            # add extra wavelengths at the beginning
+            # add extra wavelengths (reminder) at the beginning
             curr_bin_length = min_bin_length if i >= remainder else min_bin_length + 1
             bins.append(bins[-1] + curr_bin_length)
         return torch.tensor(bins)
 
-    def bin_intensity(self, num_bins: int) -> torch.Tensor:
+    def bin_intensity(
+        self, num_bins: int, interval: Optional[Sequence[int]] = None
+    ) -> torch.Tensor:
         """Bins the intensity values according to the provided bins for the wavelength.
         
         Parameters
         ----------
-        spec : Spectrum
-            The spectrum to bin.
+        num_bins: int
+            The number of bins to use.
+        interval: Optional[Sequence[int]]
+            Interval of wavelengths in which binning is done. Wavelengths outside this
+            interval are ignored. If `None`, the interval is set to the range of the
+            wavelength. Default is `None`.
 
         Returns
         -------
         torch.Tensor
             Binned intensity values.
         """
+        if not interval:
+            interval = (self.wavelength.min(), self.wavelength.max())
+        
         # initialize
         bin_edges = self._get_bins(
             num_bins=num_bins,
-            interval=(self.wavelength.min(), self.wavelength.max())
+            interval=interval,
         )
         binned_intensity = torch.zeros(len(bin_edges) - 1)
 
         # digitize the wavelength tensor into bin indices
-        bin_indices = torch.bucketize(self.wavelength, bin_edges, right=False)
+        bin_indices = torch.bucketize(self.wavelength.contiguous(), bin_edges, right=False)
 
         # perform the binning
         for i in range(1, len(bin_edges)):
             mask = bin_indices == i
             binned_intensity[i - 1] = self.intensity[mask].sum()
-
+            
         return binned_intensity
 
 
@@ -170,7 +179,7 @@ class FPRefMatrix(BaseModel):
     -------
     # Initialize the reference matrix
     >>> fp_names = ["mCherry", "mTurquoise2", "mVenus"]
-    >>> ref_matrix = FPRefMatrix(fp_names=fp_names, n_bins=32)
+    >>> ref_matrix = FPRefMatrix(fp_names=fp_names, n_bins=32, interval=(400, 700))
     
     # Create the reference matrix
     >>> ref_matrix.create()
@@ -180,6 +189,9 @@ class FPRefMatrix(BaseModel):
     """The names of the fluorophores to include in the reference matrix."""
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
+    interval: Optional[Sequence[int]] = None
+    """The interval of wavelengths in which binning is done. Wavelengths outside this
+    interval are ignored. If `None`, the interval is set to the range of the wavelength."""
 
     @cached_property
     def fp_spectra(self) -> list[Spectrum]:
@@ -200,8 +212,10 @@ class FPRefMatrix(BaseModel):
     @cached_property
     def binned_fp_intensities(self) -> list[torch.Tensor]:
         """Binned fluorophore emission spectrum intensities."""
+        fp_spectra = self.fp_spectra
         return [
-            fp_spectrum.bin_intensity(self.n_bins) for fp_spectrum in self.fp_spectra
+            fp_spectrum.bin_intensity(self.n_bins, self.interval)
+            for fp_spectrum in fp_spectra
         ]
 
     def _normalize(self, intensities: list[torch.Tensor]) -> list[torch.Tensor]:

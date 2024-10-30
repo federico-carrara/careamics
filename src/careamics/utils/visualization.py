@@ -9,6 +9,8 @@ from numpy.typing import NDArray
 import torch
 import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from careamics.utils.metrics import scale_invariant_psnr
         
         
 def _get_animation(
@@ -146,10 +148,11 @@ def _add_colorbar(img: torch.Tensor, fig, ax):
 def plot_splitting_results(
     preds: torch.Tensor,
     preds_std: torch.Tensor,
-    gt: torch.Tensor,
-    idx: Optional[int] = None
+    gts: torch.Tensor,
+    idx: Optional[int] = None,
+    pred_std: bool = False
 ) -> None:
-    """Plot a predicted image with the associated MMSE std deviation and GT.
+    """Plot a predicted image with the associated GT.
     
     Parameters
     ----------
@@ -157,24 +160,48 @@ def plot_splitting_results(
         The predicted image.
     preds_std : torch.Tensor
         The predicted std deviation.
-    gt : torch.Tensor
+    gts : torch.Tensor
         The ground truth image.
     idx : Optional[int], optional
         The index of the image to plot, by default None.
+    pred_std : bool, optional
+        Whether to plot the predicted std deviation, by default False.
     """
     N, F = preds.shape[0], preds.shape[1]
     
     if idx is None:
         idx = np.random.randint(0, N - 1)
-    
-    fig, axes = plt.subplots(3, F, figsize=(6*F, 15))
+        
+    ncols = 4 if pred_std else 3
+    fig, axes = plt.subplots(F, ncols, figsize=(6 * ncols, 5 * F))
     for i in range(F):
-        axes[0, i].set_title(f"FP {i+1} - GT")
-        im_gt = axes[0, i].imshow(gt[idx, i])
-        _add_colorbar(im_gt, fig, axes[0, i])
-        axes[1, i].set_title(f"FP {i+1} - Pred")
-        im_pred = axes[1, i].imshow(preds[idx, i])
-        _add_colorbar(im_pred, fig, axes[1, i])
-        axes[2, i].set_title(f"FP {i+1} - Pred Std")
-        im_std = axes[2, i].imshow(preds_std[idx, i])
-        _add_colorbar(im_std, fig, axes[2, i])
+        # GT
+        axes[i, 0].set_title(f"FP {i+1} - GT")
+        im_gt = axes[i, 0].imshow(gts[idx, i])
+        _add_colorbar(im_gt, fig, axes[i, 0])
+        # Pred
+        axes[i, 1].set_title(f"FP {i+1} - Pred")
+        im_pred = axes[i, 1].imshow(preds[idx, i])
+        _add_colorbar(im_pred, fig, axes[i, 1])
+        # MAE
+        pred, gt = preds[idx, i], gts[idx, i]
+        norm_pred = (pred - pred.min()) / (pred.max() - pred.min())
+        norm_gt = (gt - gt.min()) / (gt.max() - gt.min())
+        mae = np.abs(norm_pred - norm_gt)
+        axes[i, 2].set_title(f"FP {i+1} - MAE")
+        im_mae = axes[i, 2].imshow(mae, cmap='RdPu')
+        _add_colorbar(im_mae, fig, axes[i, 2])
+        psnr = scale_invariant_psnr(pred, gt)
+        axes[i, 2].text(
+            0.66, 0.1, f'PSNR: {psnr:.2f}', 
+            transform=axes[i, 2].transAxes,
+            fontsize=12, 
+            verticalalignment='center', 
+            bbox=dict(facecolor='white', alpha=0.5)
+        )
+        # Pred Std
+        if pred_std:
+            axes[i, 3].set_title(f"FP {i+1} - Pred Std")
+            im_std = axes[i, 3].imshow(preds_std[idx, i])
+            _add_colorbar(im_std, fig, axes[i, 3])
+        
