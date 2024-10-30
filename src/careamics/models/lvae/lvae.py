@@ -41,6 +41,7 @@ class LadderVAE(nn.Module):
         predict_logvar: bool,
         analytical_kl: bool,
         fluorophores: Sequence[str],
+        wv_range: Sequence[int],
         **kwargs,
     ):
         """
@@ -50,6 +51,8 @@ class LadderVAE(nn.Module):
         ----------
         fluorophores : Sequence[str]
             A sequence of the fluorophore names in the image to unmix.
+        wv_range : Sequence[int]
+            The wavelength range of the spectral image.
         """
         super().__init__()
 
@@ -73,6 +76,7 @@ class LadderVAE(nn.Module):
         # -------------------------------------------------------
         # Additional attributes λsplit
         self.fluorophores = fluorophores
+        self.wv_range = wv_range
         self.ref_learnable = kwargs.get("ref_learnable", False)
         self.in_channels = kwargs.get("num_bins", 1)
         # -------------------------------------------------------
@@ -178,6 +182,7 @@ class LadderVAE(nn.Module):
         # Mixing layer to reconstruct spectrum
         self.mixer = SpectralMixer(
             flurophores=self.fluorophores,
+            wv_range=self.wv_range,
             ref_learnable=self.ref_learnable,
             num_bins=self.in_channels,
         ) if self.fluorophores else nn.Identity() # TODO: ugly!!!

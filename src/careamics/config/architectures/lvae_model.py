@@ -39,6 +39,8 @@ class LVAEModel(ArchitectureModel):
     # λSplit parameters
     fluorophores: list[str]
     """A list of the fluorophore names in the image to unmix."""
+    wv_range: tuple[int, int] = Field(default=(400, 700))
+    """The wavelength range of the spectral image."""
     ref_learnable: bool = Field(default=False)
     """Whether the reference spectra matrix is learnable."""
     num_bins: int = Field(default=32)

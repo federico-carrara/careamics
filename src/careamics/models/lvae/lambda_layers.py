@@ -19,8 +19,8 @@ class SpectralMixer(nn.Module):
     def __init__(
         self,
         flurophores: Sequence[str],
+        wv_range: Sequence[int],
         ref_learnable: bool = False,
-        *,
         num_bins: int = 32,
     ):
         """
@@ -28,6 +28,8 @@ class SpectralMixer(nn.Module):
         ----------
         flurophores : Sequence[str]
             A sequence of fluorophore names.
+        wv_range : Sequence[int]
+            The wavelength range of the spectral image.
         ref_learnable : bool, optional
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
@@ -36,7 +38,7 @@ class SpectralMixer(nn.Module):
         super().__init__()
         
         # get the reference matrix from FPBase
-        matrix = FPRefMatrix(fp_names=flurophores, n_bins=num_bins)
+        matrix = FPRefMatrix(fp_names=flurophores, n_bins=num_bins, interval=wv_range)
         self.ref_matrix = nn.Parameter(matrix.create(), requires_grad=ref_learnable)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
