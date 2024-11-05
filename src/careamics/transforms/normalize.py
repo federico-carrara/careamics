@@ -131,6 +131,8 @@ class Normalize(Transform):
                 f"Number of means (got a list of size {len(self.image_means)}) and "
                 f"number of channels (got shape {patch.shape} for C(Z)YX) do not match."
             )
+            # TODO: patch can also be of shape SC(Z)YX, e.g., in the case we call dset[:S].
+            # In that case this check will fail.
         if len(additional_arrays) != 0:
             raise NotImplementedError(
                 "Transforming additional arrays is currently not supported for "
