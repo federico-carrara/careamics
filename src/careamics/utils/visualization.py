@@ -73,7 +73,8 @@ def view3D(
     imgs: list[np.ndarray],
     titles: Optional[list[str]] = None,
     axis: Optional[int] = 0, 
-    jupyter: Optional[bool] = True
+    jupyter: Optional[bool] = True,
+    save_path: Optional[str] = None
 ) -> Optional[HTML]:
     """View one or multiple 3D images.
 
@@ -85,6 +86,8 @@ def view3D(
         Axis to scroll through. Default is 0.
     jupyter : Optional[bool]
         Whether to display in a Jupyter Notebook. Default is True.
+    save_path : Optional[str]
+        Path to save the animation. Default is None.
 
     Returns
     -------
@@ -92,6 +95,12 @@ def view3D(
         HTML animation if in Jupyter Notebook, else `None`.
     """
     anim = _get_animation(imgs, axis, titles)
+    
+    # Save
+    if save_path:
+        anim.save(save_path, writer='pillow')
+    
+    # Render
     if jupyter:
         return HTML(anim.to_jshtml())
     else:    
