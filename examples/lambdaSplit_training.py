@@ -251,8 +251,7 @@ def train(
     
     # Set utils
     algo = "lambdasplit"
-    lc_tag = "with" if multiscale_count > 1 else "no"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}_{lc_tag}_LC")
+    workdir, exp_tag = get_workdir(root_dir, f"{algo}")
     print(f"Current workdir: {workdir}")
     
     # Define the logger
@@ -272,11 +271,14 @@ def train(
         f.write(training_config.model_dump_json(indent=4))
     with open(os.path.join(workdir, "data_config.json"), "w") as f:
         f.write(data_config.model_dump_json(indent=4))
+    with open(os.path.join(workdir, "sim_metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=4)
         
     # Save Configs in WanDB
     custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
     custom_logger.experiment.config.update({"training": training_config.model_dump()})
     custom_logger.experiment.config.update({"data": data_config.model_dump()})
+    custom_logger.experiment.config.update({"sim_metadata": metadata})
     
     # Define callbacks (e.g., ModelCheckpoint, EarlyStopping, etc.)
     custom_callbacks = [
