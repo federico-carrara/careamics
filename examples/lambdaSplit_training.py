@@ -187,6 +187,17 @@ def train(
     data_dir : str
         The directory where the data is stored.
     """
+    # Load metadata
+    with open(os.path.join(data_dir, "sim_metadata.json"), "r") as f:
+        metadata = json.load(f)
+    F = len(metadata["fluorophores"])
+    N = metadata["num_bins"]
+    
+    # Set working directory
+    algo = "lambdasplit"
+    workdir, exp_tag = get_workdir(root_dir, f"{algo}_BioSR_F{F}_N{N}")
+    print(f"Current workdir: {workdir}")
+    
     # Create configs
     training_config = TrainingConfig(
         num_epochs=max_epochs,
@@ -233,10 +244,6 @@ def train(
         collate_fn=unsupervised_collate_fn
     )
     
-    # Load metadata
-    with open(os.path.join(data_dir, "sim_metadata.json"), "r") as f:
-        metadata = json.load(f)
-    
     # Create model
     lightning_model = create_lambda_split_lightning_model(
         algorithm="lambdasplit",
@@ -248,11 +255,6 @@ def train(
         num_bins=metadata["num_bins"],
         wavelength_range=metadata["wavelength_range"],
     )
-    
-    # Set utils
-    algo = "lambdasplit"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}")
-    print(f"Current workdir: {workdir}")
     
     # Define the logger
     custom_logger = WandbLogger(
