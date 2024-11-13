@@ -156,10 +156,9 @@ def _add_colorbar(img: torch.Tensor, fig, ax):
 
 def plot_splitting_results(
     preds: torch.Tensor,
-    preds_std: torch.Tensor,
     gts: torch.Tensor,
+    preds_std: Optional[torch.Tensor] = None,
     idx: Optional[int] = None,
-    pred_std: bool = False
 ) -> None:
     """Plot a predicted image with the associated GT.
     
@@ -167,21 +166,19 @@ def plot_splitting_results(
     ----------
     preds : torch.Tensor
         The predicted image.
-    preds_std : torch.Tensor
-        The predicted std deviation.
     gts : torch.Tensor
         The ground truth image.
+    preds_std : Optional[torch.Tensor]
+        The predicted std deviation. If `None`, it won't be plotted. Default is `None`.
     idx : Optional[int], optional
         The index of the image to plot, by default None.
-    pred_std : bool, optional
-        Whether to plot the predicted std deviation, by default False.
     """
     N, F = preds.shape[0], preds.shape[1]
     
     if idx is None:
         idx = np.random.randint(0, N - 1)
         
-    ncols = 4 if pred_std else 3
+    ncols = 4 if preds_std else 3
     fig, axes = plt.subplots(F, ncols, figsize=(6 * ncols, 5 * F))
     for i in range(F):
         # GT
@@ -209,7 +206,7 @@ def plot_splitting_results(
             bbox=dict(facecolor='white', alpha=0.5)
         )
         # Pred Std
-        if pred_std:
+        if preds_std:
             axes[i, 3].set_title(f"FP {i+1} - Pred Std")
             im_std = axes[i, 3].imshow(preds_std[idx, i])
             _add_colorbar(im_std, fig, axes[i, 3])
