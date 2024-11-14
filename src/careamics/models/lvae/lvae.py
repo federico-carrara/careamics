@@ -5,7 +5,7 @@ The current implementation is based on "Interpretable Unsupervised Diversity Den
 """
 
 from collections.abc import Iterable
-from typing import Dict, List, Tuple
+from typing import Literal, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -14,24 +14,25 @@ import torch.nn as nn
 from careamics.config.architectures import register_model
 
 from ..activation import get_activation
+from .lambda_layers import SpectralMixer
 from .layers import (
     BottomUpDeterministicResBlock,
     BottomUpLayer,
     TopDownDeterministicResBlock,
     TopDownLayer,
 )
-from .utils import Interpolate, ModelType, crop_img_tensor, pad_img_tensor
+from .utils import Interpolate
 
 
 @register_model("LVAE")
 class LadderVAE(nn.Module):
-
     def __init__(
         self,
+        algorithm_type: Literal["supervised", "unsupervised"],
         input_shape: int,
         output_channels: int,
         multiscale_count: int,
-        z_dims: List[int],
+        z_dims: list[int],
         encoder_n_filters: int,
         decoder_n_filters: int,
         encoder_dropout: float,
@@ -39,18 +40,25 @@ class LadderVAE(nn.Module):
         nonlinearity: str,
         predict_logvar: bool,
         analytical_kl: bool,
+        fluorophores: Sequence[str],
+        wv_range: Sequence[int],
+        **kwargs,
     ):
         """
         Constructor.
 
         Parameters
         ----------
-
+        fluorophores : Sequence[str]
+            A sequence of the fluorophore names in the image to unmix.
+        wv_range : Sequence[int]
+            The wavelength range of the spectral image.
         """
         super().__init__()
 
         # -------------------------------------------------------
         # Customizable attributes
+        self.algorithm_type = algorithm_type
         self.image_size = input_shape
         self.target_ch = output_channels
         self._multiscale_count = multiscale_count
@@ -63,10 +71,19 @@ class LadderVAE(nn.Module):
         self.predict_logvar = predict_logvar
         self.analytical_kl = analytical_kl
         # -------------------------------------------------------
+        
+        
+        # -------------------------------------------------------
+        # Additional attributes λsplit
+        self.fluorophores = fluorophores
+        self.wv_range = wv_range
+        self.ref_learnable = kwargs.get("ref_learnable", False)
+        self.in_channels = kwargs.get("num_bins", 1)
+        # -------------------------------------------------------
+        
 
         # -------------------------------------------------------
         # Model attributes -> Hardcoded
-        self.model_type = ModelType.LadderVae  # TODO remove !
         self.encoder_blocks_per_layer = 1
         self.decoder_blocks_per_layer = 1
         self.bottomup_batchnorm = True
@@ -75,8 +92,6 @@ class LadderVAE(nn.Module):
         self.gated = True
         self.encoder_res_block_kernel = 3
         self.decoder_res_block_kernel = 3
-        self.encoder_res_block_skip_padding = False
-        self.decoder_res_block_skip_padding = False
         self.merge_type = "residual"
         self.no_initial_downscaling = True
         self.skip_bottomk_buvalues = 0
@@ -102,32 +117,10 @@ class LadderVAE(nn.Module):
 
         # Derived attributes
         self.n_layers = len(self.z_dims)
-        self.encoder_no_padding_mode = (
-            self.encoder_res_block_skip_padding is True
-            and self.encoder_res_block_kernel > 1
-        )
-        self.decoder_no_padding_mode = (
-            self.decoder_res_block_skip_padding is True
-            and self.decoder_res_block_kernel > 1
-        )
-
-        # Others...
-        self._tethered_to_input = False
-        self._tethered_ch1_scalar = self._tethered_ch2_scalar = None
-        if self._tethered_to_input:
-            target_ch = 1
-            requires_grad = False
-            self._tethered_ch1_scalar = nn.Parameter(
-                torch.ones(1) * 0.5, requires_grad=requires_grad
-            )
-            self._tethered_ch2_scalar = nn.Parameter(
-                torch.ones(1) * 2.0, requires_grad=requires_grad
-            )
         # -------------------------------------------------------
 
         # -------------------------------------------------------
         # Data attributes
-        self.color_ch = 1
         self.img_shape = (self.image_size, self.image_size)
         self.normalized_input = True
         # -------------------------------------------------------
@@ -138,22 +131,9 @@ class LadderVAE(nn.Module):
         # enabling reconstruction loss on mixed input
         self.mixed_rec_w = 0
         self.nbr_consistency_w = 0
-
         # -------------------------------------------------------
 
         # -------------------------------------------------------
-        # # Training attributes
-        # # can be used to tile the validation predictions
-        # self._val_idx_manager = val_idx_manager
-        # self._val_frame_creator = None
-        # # initialize the learning rate scheduler params.
-        # self.lr_scheduler_monitor = self.lr_scheduler_mode = None
-        # self._init_lr_scheduler_params(config)
-        # self._global_step = 0
-        # -------------------------------------------------------
-
-        # -------------------------------------------------------
-
         # Calculate the downsampling happening in the network
         self.downsample = [1] * self.n_layers
         self.overall_downscale_factor = np.power(2, sum(self.downsample))
@@ -195,17 +175,18 @@ class LadderVAE(nn.Module):
             self.decoder_n_filters,
             self.target_ch * (1 + logvar_ch_needed),
             kernel_size=3,
-            padding=1,
+            padding="same",
             bias=self.topdown_conv2d_bias,
         )
-
-        # # gradient norms. updated while training. this is also logged.
-        # self.grad_norm_bottom_up = 0.0
-        # self.grad_norm_top_down = 0.0
-        # PSNR computation on validation.
-        # self.label1_psnr = RunningPSNR()
-        # self.label2_psnr = RunningPSNR()
-
+        
+        # Mixing layer to reconstruct spectrum
+        self.mixer = SpectralMixer(
+            flurophores=self.fluorophores,
+            wv_range=self.wv_range,
+            ref_learnable=self.ref_learnable,
+            num_bins=self.in_channels,
+        ) if self.fluorophores else nn.Identity() # TODO: ugly!!!
+        
         # msg =f'[{self.__class__.__name__}] Stoc:{not self.non_stochastic_version} RecMode:{self.reconstruction_mode} TethInput:{self._tethered_to_input}'
         # msg += f' TargetCh: {self.target_ch}'
         # print(msg)
@@ -230,20 +211,14 @@ class LadderVAE(nn.Module):
             The number of BottomUpDeterministicResBlocks to include in the layer, default is 1.
         """
         nonlin = get_activation(self.nonlin)
-        modules = [
-            nn.Conv2d(
-                in_channels=self.color_ch,
-                out_channels=self.encoder_n_filters,
-                kernel_size=self.encoder_res_block_kernel,
-                padding=(
-                    0
-                    if self.encoder_res_block_skip_padding
-                    else self.encoder_res_block_kernel // 2
-                ),
-                stride=init_stride,
-            ),
-            nonlin,
-        ]
+        conv_block = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.encoder_n_filters,
+            kernel_size=self.encoder_res_block_kernel,
+            padding=self.encoder_res_block_kernel // 2,
+            stride=init_stride,
+        )
+        modules = [conv_block, nonlin]
 
         for _ in range(num_res_blocks):
             modules.append(
@@ -255,7 +230,6 @@ class LadderVAE(nn.Module):
                     batchnorm=self.bottomup_batchnorm,
                     dropout=self.encoder_dropout,
                     res_block_type=self.res_block_type,
-                    skip_padding=self.encoder_res_block_skip_padding,
                     res_block_kernel=self.encoder_res_block_kernel,
                 )
             )
@@ -282,23 +256,20 @@ class LadderVAE(nn.Module):
 
         bottom_up_layers = nn.ModuleList([])
         for i in range(self.n_layers):
-            # Whether this is the top layer
-            is_top = i == self.n_layers - 1
-
             # LC is applied only to the first (_multiscale_count - 1) bottom-up layers
             layer_enable_multiscale = (
                 self.enable_multiscale and self._multiscale_count > i + 1
             )
 
-            # This factor determines the factor by which the low-resolution tensor is larger
-            # N.B. Only used if layer_enable_multiscale == True, so we updated it only in that case
+            # This determines the factor by which the low-resolution tensor is larger
+            # N.B. Only used if layer_enable_multiscale == True
             multiscale_lowres_size_factor *= 1 + int(layer_enable_multiscale)
 
-            output_expected_shape = (
-                (self.img_shape[0] // 2 ** (i + 1), self.img_shape[1] // 2 ** (i + 1))
-                if self._multiscale_count > 1
-                else None
-            )
+            # TODO: check correctness of this
+            if self._multiscale_count > 1:
+                output_expected_shape = (dim // 2 ** (i + 1) for dim in self.img_shape)
+            else:
+                output_expected_shape = None
 
             # Add bottom-up deterministic layer at level i.
             # It's a sequence of residual blocks (BottomUpDeterministicResBlock), possibly with downsampling between them.
@@ -312,10 +283,9 @@ class LadderVAE(nn.Module):
                     dropout=self.encoder_dropout,
                     res_block_type=self.res_block_type,
                     res_block_kernel=self.encoder_res_block_kernel,
-                    res_block_skip_padding=self.encoder_res_block_skip_padding,
                     gated=self.gated,
                     lowres_separate_branch=lowres_separate_branch,
-                    enable_multiscale=self.enable_multiscale,  # shouldn't the arg be `layer_enable_multiscale` here?
+                    enable_multiscale=self.enable_multiscale,  # TODO: shouldn't the arg be `layer_enable_multiscale` here?
                     multiscale_retain_spatial_dims=self.multiscale_retain_spatial_dims,
                     multiscale_lowres_size_factor=multiscale_lowres_size_factor,
                     decoder_retain_spatial_dims=self.multiscale_decoder_retain_spatial_dims,
@@ -356,7 +326,7 @@ class LadderVAE(nn.Module):
             # Check if this is the top layer
             is_top = i == self.n_layers - 1
 
-            if self._enable_topdown_normalize_factor:
+            if self._enable_topdown_normalize_factor:  # TODO: What is this?
                 normalize_latent_factor = (
                     1 / np.sqrt(2 * (1 + i)) if len(self.z_dims) > 4 else 1.0
                 )
@@ -369,7 +339,7 @@ class LadderVAE(nn.Module):
                     n_res_blocks=self.decoder_blocks_per_layer,
                     n_filters=self.decoder_n_filters,
                     is_top_layer=is_top,
-                    downsampling_steps=self.downsample[i],
+                    upsampling_steps=self.downsample[i],
                     nonlin=nonlin,
                     merge_type=self.merge_type,
                     batchnorm=self.topdown_batchnorm,
@@ -379,14 +349,10 @@ class LadderVAE(nn.Module):
                     top_prior_param_shape=self.get_top_prior_param_shape(),
                     res_block_type=self.res_block_type,
                     res_block_kernel=self.decoder_res_block_kernel,
-                    res_block_skip_padding=self.decoder_res_block_skip_padding,
                     gated=self.gated,
                     analytical_kl=self.analytical_kl,
                     restricted_kl=self._restricted_kl,
                     vanilla_latent_hw=self.get_latent_spatial_size(i),
-                    # in no_padding_mode, what gets passed from the encoder are not multiples of 2 and so merging operation does not work natively.
-                    bottomup_no_padding_mode=self.encoder_no_padding_mode,
-                    topdown_no_padding_mode=self.decoder_no_padding_mode,
                     retain_spatial_dims=self.multiscale_decoder_retain_spatial_dims,
                     non_stochastic_version=self.non_stochastic_version,
                     input_image_shape=self.img_shape,
@@ -398,8 +364,10 @@ class LadderVAE(nn.Module):
         return top_down_layers
 
     def create_final_topdown_layer(self, upsample: bool) -> nn.Sequential:
-        """
-        This method creates the final top-down layer of the Decoder.
+        """Create the final top-down layer of the Decoder.
+
+        NOTE: In this layer, (optional) upsampling is performed by bilinear interpolation
+        instead of transposed convolution (like in other TD layers).
 
         Parameters
         ----------
@@ -423,7 +391,6 @@ class LadderVAE(nn.Module):
                     dropout=self.decoder_dropout,
                     res_block_type=self.res_block_type,
                     res_block_kernel=self.decoder_res_block_kernel,
-                    skip_padding=self.decoder_res_block_skip_padding,
                     gated=self.gated,
                     conv2d_bias=self.topdown_conv2d_bias,
                 )
@@ -451,25 +418,28 @@ class LadderVAE(nn.Module):
         if self._multiscale_count is None:
             self._multiscale_count = 1
 
-        msg = "Multiscale count({}) should not exceed the number of bottom up layers ({}) by more than 1"
-        msg = msg.format(self._multiscale_count, self.n_layers)
+        msg = (
+            f"Multiscale count ({self._multiscale_count}) should not exceed the number"
+            f"of bottom up layers ({self.n_layers}) by more than 1.\n"
+        )
         assert (
             self._multiscale_count <= 1 or self._multiscale_count <= 1 + self.n_layers
         ), msg
 
         msg = (
-            "if multiscale is enabled, then we are just working with monocrome images."
+            "Multiscale approach only supports monocrome images. "
+            f"Found instead in_channels={self.in_channels}."
         )
-        assert self._multiscale_count == 1 or self.color_ch == 1, msg
+        assert self._multiscale_count == 1 or self.in_channels == 1, msg
 
         lowres_first_bottom_ups = []
         for _ in range(1, self._multiscale_count):
             first_bottom_up = nn.Sequential(
                 nn.Conv2d(
-                    in_channels=self.color_ch,
+                    in_channels=self.in_channels,
                     out_channels=self.encoder_n_filters,
                     kernel_size=5,
-                    padding=2,
+                    padding="same",
                     stride=stride,
                 ),
                 nonlin,
@@ -481,7 +451,6 @@ class LadderVAE(nn.Module):
                     batchnorm=self.bottomup_batchnorm,
                     dropout=self.encoder_dropout,
                     res_block_type=self.res_block_type,
-                    skip_padding=self.encoder_res_block_skip_padding,
                 ),
             )
             lowres_first_bottom_ups.append(first_bottom_up)
@@ -493,7 +462,7 @@ class LadderVAE(nn.Module):
         )
 
     ### SET OF FORWARD-LIKE METHODS
-    def bottomup_pass(self, inp: torch.Tensor) -> List[torch.Tensor]:
+    def bottomup_pass(self, inp: torch.Tensor) -> list[torch.Tensor]:
         """
         Wrapper of _bottomup_pass().
         """
@@ -510,7 +479,7 @@ class LadderVAE(nn.Module):
         first_bottom_up: nn.Sequential,
         lowres_first_bottom_ups: nn.ModuleList,
         bottom_up_layers: nn.ModuleList,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
         This method defines the forward pass through the LVAE Encoder, the so-called
         Bottom-Up pass.
@@ -549,14 +518,14 @@ class LadderVAE(nn.Module):
 
     def topdown_pass(
         self,
-        bu_values: torch.Tensor = None,
-        n_img_prior: torch.Tensor = None,
-        mode_layers: Iterable[int] = None,
-        constant_layers: Iterable[int] = None,
-        forced_latent: List[torch.Tensor] = None,
-        top_down_layers: nn.ModuleList = None,
-        final_top_down_layer: nn.Sequential = None,
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        bu_values: Union[torch.Tensor, None] = None,
+        n_img_prior: Union[torch.Tensor, None] = None,
+        mode_layers: Union[Iterable[int], None] = None,
+        constant_layers: Union[Iterable[int], None] = None,
+        forced_latent: Union[list[torch.Tensor], None] = None,
+        top_down_layers: Union[nn.ModuleList, None] = None,
+        final_top_down_layer: Union[nn.Sequential, None] = None,
+    ) -> Tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
         This method defines the forward pass through the LVAE Decoder, the so-called
         Top-Down pass.
@@ -575,7 +544,7 @@ class LadderVAE(nn.Module):
             A sequence of indexes associated to the layers in which a single instance's z is
             copied over the entire batch (bottom-up path is not used, so only prior is used here).
             Set to `None` to avoid this behaviour.
-        forced_latent: List[torch.Tensor], optional
+        forced_latent: list[torch.Tensor], optional
             A list of tensors that are used as fixed latent variables (hence, sampling doesn't take
             place in this case).
         top_down_layers: nn.ModuleList, optional
@@ -590,7 +559,7 @@ class LadderVAE(nn.Module):
         if final_top_down_layer is None:
             final_top_down_layer = self.final_top_down
 
-        # Default: no layer is sampled from the distribution's mode
+        # Default: no latent is taken as the distribution's mode
         if mode_layers is None:
             mode_layers = []
         if constant_layers is None:
@@ -621,34 +590,24 @@ class LadderVAE(nn.Module):
 
         # Sampled latent variables at each layer
         z = [None] * self.n_layers
-
         # KL divergence of each layer
         kl = [None] * self.n_layers
         # Kl divergence restricted, only for the LC enabled setup denoiSplit.
         kl_restricted = [None] * self.n_layers
-
         # mean from which z is sampled.
         q_mu = [None] * self.n_layers
         # log(var) from which z is sampled.
         q_lv = [None] * self.n_layers
-
         # Spatial map of KL divergence for each layer
         kl_spatial = [None] * self.n_layers
-
         debug_qvar_max = [None] * self.n_layers
-
         kl_channelwise = [None] * self.n_layers
-
         if forced_latent is None:
             forced_latent = [None] * self.n_layers
 
-        # log p(z) where z is the sample in the topdown pass
-        # logprob_p = 0.
-
         # Top-down inference/generation loop
-        out = out_pre_residual = None
+        out = None
         for i in reversed(range(self.n_layers)):
-
             # If available, get deterministic node from bottom-up inference
             try:
                 bu_value = bu_values[i]
@@ -663,7 +622,7 @@ class LadderVAE(nn.Module):
             skip_input = out  # TODO or n? or both?
 
             # Full top-down layer, including sampling and deterministic part
-            out, out_pre_residual, aux = top_down_layers[i](
+            out, aux = top_down_layers[i](
                 input_=out,
                 skip_connection_input=skip_input,
                 inference_mode=inference_mode,
@@ -708,92 +667,37 @@ class LadderVAE(nn.Module):
         }
         return out, data
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
         Parameters
         ----------
         x: torch.Tensor
             The input tensor of shape (B, C, H, W).
+            
+        Returns
+        -------
+        remixed: torch.Tensor
+            The remixed spectral image. Shape is (B, C, H, W), C = # spectral channels. 
+        out: torch.Tensor
+            The unmixed images output of the model. Shape is (B, F, H, W), F = # flurophores.
+        td_data: dict[str, torch.Tensor]
+            Additional data from the top-down pass (e.g., latents, KL values).
         """
-        img_size = x.size()[2:]
-
-        # Pad input to size equal to the closest power of 2
-        x_pad = self.pad_input(x)
-
         # Bottom-up inference: return list of length n_layers (bottom to top)
-        bu_values = self.bottomup_pass(x_pad)
+        bu_values = self.bottomup_pass(x)
+        
+        # TODO: these operations seems unnecessary... Remove?
         for i in range(0, self.skip_bottomk_buvalues):
             bu_values[i] = None
-
         mode_layers = range(self.n_layers) if self.non_stochastic_version else None
 
         # Top-down inference/generation
         out, td_data = self.topdown_pass(bu_values, mode_layers=mode_layers)
-
-        if out.shape[-1] > img_size[-1]:
-            # Restore original image size
-            out = crop_img_tensor(out, img_size)
-
         out = self.output_layer(out)
-        if self._tethered_to_input:
-            assert out.shape[1] == 1
-            ch2 = self.get_other_channel(out, x_pad)
-            out = torch.cat([out, ch2], dim=1)
-
-        return out, td_data
-
-    ### SET OF UTILS METHODS
-    # def sample_prior(
-    #         self,
-    #         n_imgs,
-    #         mode_layers=None,
-    #         constant_layers=None
-    #     ):
-
-    #     # Generate from prior
-    #     out, _ = self.topdown_pass(n_img_prior=n_imgs, mode_layers=mode_layers, constant_layers=constant_layers)
-    #     out = crop_img_tensor(out, self.img_shape)
-
-    #     # Log likelihood and other info (per data point)
-    #     _, likelihood_data = self.likelihood(out, None)
-
-    #     return likelihood_data['sample']
-
-    # ### ???
-    # def sample_from_q(self, x, masks=None):
-    #     """
-    #     This method performs the bottomup_pass() and samples from the
-    #     obtained distribution.
-    #     """
-    #     img_size = x.size()[2:]
-
-    #     # Pad input to make everything easier with conv strides
-    #     x_pad = self.pad_input(x)
-
-    #     # Bottom-up inference: return list of length n_layers (bottom to top)
-    #     bu_values = self.bottomup_pass(x_pad)
-    #     return self._sample_from_q(bu_values, masks=masks)
-    # ### ???
-
-    # def _sample_from_q(self, bu_values, top_down_layers=None, final_top_down_layer=None, masks=None):
-    #     if top_down_layers is None:
-    #         top_down_layers = self.top_down_layers
-    #     if final_top_down_layer is None:
-    #         final_top_down_layer = self.final_top_down
-    #     if masks is None:
-    #         masks = [None] * len(bu_values)
-
-    #     msg = "Multiscale is not supported as of now. You need the output from the previous layers to do this."
-    #     assert self.n_layers == 1, msg
-    #     samples = []
-    #     for i in reversed(range(self.n_layers)):
-    #         bu_value = bu_values[i]
-
-    #         # Note that the first argument can be set to None since we are just dealing with one level
-    #         sample = top_down_layers[i].sample_from_q(None, bu_value, var_clip_max=self._var_clip_max, mask=masks[i])
-    #         samples.append(sample)
-
-    #     return samples
+        
+        # Re-mixing
+        remixed = self.mixer(out)
+        return remixed, out, td_data
 
     def reset_for_different_output_size(self, output_size: int) -> None:
         """Reset shape of output and latent tensors for different output size.
@@ -802,66 +706,58 @@ class LadderVAE(nn.Module):
         input/output shape changes.
         For instance, it is needed when the model was trained on, say, 64x64 sized
         patches, but prediction is done on 128x128 patches.
+        
+        Parameters
+        ----------
+        output_size: int
+            The new output size for the model.
+            
+        Returns
+        -------
+        None
         """
         for i in range(self.n_layers):
             sz = output_size // 2 ** (1 + i)
             self.bottom_up_layers[i].output_expected_shape = (sz, sz)
             self.top_down_layers[i].latent_shape = (output_size, output_size)
 
-    def pad_input(self, x):
-        """
-        Pads input x so that its sizes are powers of 2
-        :param x:
-        :return: Padded tensor
-        """
-        size = self.get_padded_size(x.size())
-        x = pad_img_tensor(x, size)
-        return x
-
     ### SET OF GETTERS
-    def get_padded_size(self, size):
-        """
-        Returns the smallest size (H, W) of the image with actual size given
-        as input, such that H and W are powers of 2.
-        :param size: input size, tuple either (N, C, H, w) or (H, W)
-        :return: 2-tuple (H, W)
-        """
-        # Make size argument into (heigth, width)
-        if len(size) == 4:
-            size = size[2:]
-        if len(size) != 2:
-            msg = (
-                "input size must be either (N, C, H, W) or (H, W), but it "
-                f"has length {len(size)} (size={size})"
-            )
-            raise RuntimeError(msg)
-
-        if self.multiscale_decoder_retain_spatial_dims is True:
-            # In this case, we can go much more deeper and so this is not required
-            # (in the way it is. ;). More work would be needed if this was to be correctly implemented )
-            return list(size)
-
-        # Overall downscale factor from input to top layer (power of 2)
-        dwnsc = self.overall_downscale_factor
-
-        # Output smallest powers of 2 that are larger than current sizes
-        padded_size = list(((s - 1) // dwnsc + 1) * dwnsc for s in size)
-
-        return padded_size
-
-    def get_latent_spatial_size(self, level_idx: int):
-        """
-        level_idx: 0 is the bottommost layer, the highest resolution one.
+    def get_latent_spatial_size(self, level_idx: int) -> int:
+        """Get the spatial size of the latent variable at a given level.
+        
+        NOTE: level_idx: 0 is the bottommost layer, the highest resolution one.
+        
+        Parameters
+        ----------
+        level_idx: int
+            The level of the layer for which we want to get the latent spatial size.
+            
+        Returns
+        -------
+        int
+            The spatial size of the latent variable at the given level.
         """
         actual_downsampling = level_idx + 1
         dwnsc = 2**actual_downsampling
-        sz = self.get_padded_size(self.img_shape)
-        h = sz[0] // dwnsc
-        w = sz[1] // dwnsc
+        h = self.img_shape[0] // dwnsc
+        w = self.img_shape[1] // dwnsc
         assert h == w
         return h
 
-    def get_top_prior_param_shape(self, n_imgs: int = 1):
+    def get_top_prior_param_shape(self, n_imgs: int = 1) -> tuple[int, int, int, int]:
+        """Get the shape of the parameters of the top-most prior distribution.
+        
+        Parameters
+        ----------
+        n_imgs: int, optional
+            The number of images for which to get the shape of the parameters in case
+            it needs to be replicated. Default is 1.
+            
+        Returns
+        -------
+        tuple[int, int, int, int]
+            The shape of the parameters of the top-most prior distribution.
+        """
         # TODO num channels depends on random variable we're using
 
         # Compute the total downscaling performed in the Encoder
@@ -872,26 +768,8 @@ class LadderVAE(nn.Module):
             actual_downsampling = self.n_layers + 1 - self._multiscale_count
             dwnsc = 2**actual_downsampling
 
-        sz = self.get_padded_size(self.img_shape)
-        h = sz[0] // dwnsc
-        w = sz[1] // dwnsc
+        h = self.img_shape[0] // dwnsc
+        w = self.img_shape[1] // dwnsc
         c = self.z_dims[-1] * 2  # mu and logvar
         top_layer_shape = (n_imgs, c, h, w)
         return top_layer_shape
-
-    def get_other_channel(self, ch1, input):
-        assert self.data_std["target"].squeeze().shape == (2,)
-        assert self.data_mean["target"].squeeze().shape == (2,)
-        assert self.target_ch == 2
-        ch1_un = (
-            ch1[:, :1] * self.data_std["target"][:, :1]
-            + self.data_mean["target"][:, :1]
-        )
-        input_un = input * self.data_std["input"] + self.data_mean["input"]
-        ch2_un = self._tethered_ch2_scalar * (
-            input_un - ch1_un * self._tethered_ch1_scalar
-        )
-        ch2 = (ch2_un - self.data_mean["target"][:, -1:]) / self.data_std["target"][
-            :, -1:
-        ]
-        return ch2

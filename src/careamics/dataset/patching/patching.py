@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Union
+from typing import Callable, Literal, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -63,6 +63,7 @@ def prepare_patches_supervised(
     axes: str,
     patch_size: Union[list[int], tuple[int, ...]],
     read_source_func: Callable,
+    norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches and corresponding targets.
@@ -81,6 +82,8 @@ def prepare_patches_supervised(
         Size of the patches.
     read_source_func : Callable
         Function to read the data.
+    norm_strategy : Literal["channel_wise", "global"]
+        Normalization strategy.
 
     Returns
     -------
@@ -126,12 +129,16 @@ def prepare_patches_supervised(
             f"{target_files}."
         )
 
-    image_means, image_stds = compute_normalization_stats(np.concatenate(all_patches))
-    target_means, target_stds = compute_normalization_stats(np.concatenate(all_targets))
-
     patch_array: np.ndarray = np.concatenate(all_patches, axis=0)
     target_array: np.ndarray = np.concatenate(all_targets, axis=0)
     logger.info(f"Extracted {patch_array.shape[0]} patches from input array.")
+    
+    image_means, image_stds = compute_normalization_stats(
+        patch_array, norm_strategy
+    )
+    target_means, target_stds = compute_normalization_stats(
+        target_array, norm_strategy
+    )
 
     return PatchedOutput(
         patch_array,
@@ -147,6 +154,7 @@ def prepare_patches_unsupervised(
     axes: str,
     patch_size: Union[list[int], tuple[int]],
     read_source_func: Callable,
+    norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -162,6 +170,8 @@ def prepare_patches_unsupervised(
         Size of the patches.
     read_source_func : Callable
         Function to read the data.
+    norm_strategy : Literal["channel_wise", "global"]
+        Normalization strategy.
 
     Returns
     -------
@@ -173,8 +183,8 @@ def prepare_patches_unsupervised(
     for filename in train_files:
         try:
             sample: np.ndarray = read_source_func(filename, axes)
-            means += sample.mean()
-            stds += sample.std()
+            means += sample.mean() # TODO: what do we need this for?
+            stds += sample.std() # TODO: what do we need this for?
             num_samples += 1
 
             # reshape array
@@ -193,11 +203,13 @@ def prepare_patches_unsupervised(
     if num_samples == 0:
         raise ValueError(f"No valid samples found in the input data: {train_files}.")
 
-    image_means, image_stds = compute_normalization_stats(np.concatenate(all_patches))
-
     patch_array: np.ndarray = np.concatenate(all_patches)
     logger.info(f"Extracted {patch_array.shape[0]} patches from input array.")
-
+    
+    image_means, image_stds = compute_normalization_stats(
+        patch_array, norm_strategy
+    )
+    
     return PatchedOutput(
         patch_array, None, Stats(image_means, image_stds), Stats((), ())
     )
@@ -209,6 +221,7 @@ def prepare_patches_supervised_array(
     axes: str,
     data_target: NDArray,
     patch_size: Union[list[int], tuple[int]],
+    norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -227,6 +240,8 @@ def prepare_patches_supervised_array(
         Target data array.
     patch_size : list or tuple of int
         Size of the patches.
+    norm_strategy : Literal["channel_wise", "global"]
+        Normalization strategy.
 
     Returns
     -------
@@ -238,8 +253,12 @@ def prepare_patches_supervised_array(
     reshaped_target = reshape_array(data_target, axes)
 
     # compute statistics
-    image_means, image_stds = compute_normalization_stats(reshaped_sample)
-    target_means, target_stds = compute_normalization_stats(reshaped_target)
+    image_means, image_stds = compute_normalization_stats(
+        reshaped_sample, norm_strategy
+    )
+    target_means, target_stds = compute_normalization_stats(
+        reshaped_target, norm_strategy
+    )
 
     # generate patches, return a generator
     patches, patch_targets = extract_patches_sequential(
@@ -264,6 +283,7 @@ def prepare_patches_unsupervised_array(
     data: NDArray,
     axes: str,
     patch_size: Union[list[int], tuple[int]],
+    norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches.
@@ -281,6 +301,8 @@ def prepare_patches_unsupervised_array(
         Axes of the data.
     patch_size : list or tuple of int
         Size of the patches.
+    norm_strategy : Literal["channel_wise", "global"]
+        Normalization strategy.
 
     Returns
     -------
@@ -291,7 +313,7 @@ def prepare_patches_unsupervised_array(
     reshaped_sample = reshape_array(data, axes)
 
     # calculate mean and std
-    means, stds = compute_normalization_stats(reshaped_sample)
+    means, stds = compute_normalization_stats(reshaped_sample, norm_strategy)
 
     # generate patches, return a generator
     patches, _ = extract_patches_sequential(reshaped_sample, patch_size=patch_size)

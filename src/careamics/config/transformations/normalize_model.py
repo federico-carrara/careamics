@@ -18,10 +18,17 @@ class NormalizeModel(TransformModel):
     ----------
     name : Literal["Normalize"]
         Name of the transformation.
-    mean : float
-        Mean value for normalization.
-    std : float
-        Standard deviation value for normalization.
+    strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
+    image_means : list
+        Mean values used for normalization of input images.
+    image_stds : list
+        Standard deviation values used for normalization of input images.
+    target_means : Optional[list]
+        Mean values used for normalization of target images. Default is None.
+    target_stds : Optional[list]
+        Standard deviation values used for normalization of target images. 
+        Default is None.
     """
 
     model_config = ConfigDict(
@@ -29,6 +36,7 @@ class NormalizeModel(TransformModel):
     )
 
     name: Literal["Normalize"] = "Normalize"
+    strategy: Literal["channel-wise", "global"] = "channel-wise"
     image_means: list = Field(..., min_length=0, max_length=32)
     image_stds: list = Field(..., min_length=0, max_length=32)
     target_means: Optional[list] = Field(default=None, min_length=0, max_length=32)

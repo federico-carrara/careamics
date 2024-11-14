@@ -1,10 +1,15 @@
 """Computing data statistics."""
 
+from typing import Literal
+
 import numpy as np
 from numpy.typing import NDArray
 
 
-def compute_normalization_stats(image: NDArray) -> tuple[NDArray, NDArray]:
+def compute_normalization_stats(
+    image: NDArray, 
+    strategy: Literal["channel-wise", "global"] = "channel-wise"
+) -> tuple[NDArray, NDArray]:
     """
     Compute mean and standard deviation of an array.
 
@@ -15,15 +20,36 @@ def compute_normalization_stats(image: NDArray) -> tuple[NDArray, NDArray]:
     ----------
     image : NDArray
         Input array.
+    norm_strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
 
     Returns
     -------
     tuple of (list of floats, list of floats)
         Lists of mean and standard deviation values per channel.
     """
-    # Define the list of axes excluding the channel axis
-    axes = tuple(np.delete(np.arange(image.ndim), 1))
-    return np.mean(image, axis=axes), np.std(image, axis=axes)
+    # TODO: this needs to be fixed a little bit
+    if strategy == "channel-wise":
+        # Define the list of axes excluding the channel axis
+        axes = tuple(np.delete(np.arange(image.ndim), 1))
+        stats = (
+            np.mean(image, axis=axes), # (C,)
+            np.std(image, axis=axes) # (C,)
+        )
+    elif strategy == "global":
+        axes = tuple(np.arange(image.ndim))
+        stats = (
+            np.asarray(np.mean(image, axis=axes))[None], # (1,) 
+            np.asarray(np.std(image, axis=axes))[None] # (1,)
+        )
+    else:
+        raise ValueError(
+            (
+                f"Unknown normalization strategy: {strategy}."
+                "Available ones are 'channel-wise' and 'global'."
+            )
+        )
+    return stats
 
 
 def update_iterative_stats(

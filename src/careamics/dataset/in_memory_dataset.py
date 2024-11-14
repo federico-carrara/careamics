@@ -74,12 +74,16 @@ class InMemoryDataset(Dataset):
         self.input_targets = input_target
         self.axes = self.data_config.axes
         self.patch_size = self.data_config.patch_size
+        self.norm_strategy = self.data_config.norm_strategy
 
         # read function
         self.read_source_func = read_source_func
 
         # generate patches
         supervised = self.input_targets is not None
+        # TODO: might be useful to decopule the patching from the dataset
+        # loading, e.g., in the case some preprocessing is needed on the 
+        # full image.
         patches_data = self._prepare_patches(supervised)
 
         # unpack the dataclass
@@ -118,10 +122,12 @@ class InMemoryDataset(Dataset):
         self.patch_transform = Compose(
             transform_list=[
                 NormalizeModel(
+                    strategy=self.norm_strategy,
                     image_means=self.image_stats.means,
                     image_stds=self.image_stats.stds,
                     target_means=self.target_stats.means,
                     target_stds=self.target_stats.stds,
+                    
                 )
             ]
             + self.data_config.transforms,
@@ -150,6 +156,7 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.input_targets,
                     self.patch_size,
+                    self.norm_strategy,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
@@ -157,7 +164,9 @@ class InMemoryDataset(Dataset):
                     self.input_targets,
                     self.axes,
                     self.patch_size,
+                    self.norm_strategy,
                     self.read_source_func,
+                    self.norm_strategy,
                 )
             else:
                 raise ValueError(
@@ -171,6 +180,7 @@ class InMemoryDataset(Dataset):
                     self.inputs,
                     self.axes,
                     self.patch_size,
+                    self.norm_strategy,
                 )
             else:
                 return prepare_patches_unsupervised(
@@ -178,6 +188,7 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.patch_size,
                     self.read_source_func,
+                    self.norm_strategy,
                 )
 
     def __len__(self) -> int:
@@ -216,16 +227,9 @@ class InMemoryDataset(Dataset):
         if self.data_targets is not None:
             # get target
             target = self.data_targets[index]
-
             return self.patch_transform(patch=patch, target=target)
-
-        elif self.data_config.has_n2v_manipulate():  # TODO not compatible with HDN
-            return self.patch_transform(patch=patch)
         else:
-            raise ValueError(
-                "Something went wrong! No target provided (not supervised training) "
-                "and no N2V manipulation (no N2V training)."
-            )
+            return self.patch_transform(patch=patch)
 
     def get_data_statistics(self) -> tuple[list[float], list[float]]:
         """Return training data statistics.

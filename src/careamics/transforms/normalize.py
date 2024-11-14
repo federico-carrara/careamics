@@ -1,6 +1,6 @@
 """Normalization and denormalization transforms for image patches."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -26,8 +26,18 @@ def _reshape_stats(stats: list[float], ndim: int) -> NDArray:
     NDArray
         Reshaped stats.
     """
-    return np.array(stats)[(..., *[np.newaxis] * (ndim - 1))]
-
+    arr = np.array(stats)
+    if arr.ndim == 1:
+        return arr[(..., *[np.newaxis] * (ndim - 1))]
+    elif arr.ndim == ndim:
+        return arr
+    elif arr.ndim <= ndim:
+        return arr[(..., *np.newaxis * (ndim - arr.ndim))]
+    else:
+        raise ValueError(
+            f"Stats array has too many dimensions ({arr.ndim}) compared to the image "
+            f"({ndim})."
+        )
 
 class Normalize(Transform):
     """
@@ -68,6 +78,7 @@ class Normalize(Transform):
         image_stds: list[float],
         target_means: Optional[list[float]] = None,
         target_stds: Optional[list[float]] = None,
+        strategy: Literal["channel-wise", "global"] = "channel-wise",
     ):
         """Constructor.
 
@@ -81,11 +92,14 @@ class Normalize(Transform):
             Target mean value per channel, by default None.
         target_stds : list of float, optional
             Target standard deviation value per channel, by default None.
+        strategy : Literal["channel-wise", "global"], optional
+            Normalization strategy, by default "channel-wise".
         """
         self.image_means = image_means
         self.image_stds = image_stds
         self.target_means = target_means
         self.target_stds = target_stds
+        self.strategy = strategy
 
         self.eps = 1e-6
 
@@ -112,11 +126,13 @@ class Normalize(Transform):
         tuple of NDArray
             Transformed patch and target, the target can be returned as `None`.
         """
-        if len(self.image_means) != patch.shape[0]:
+        if self.strategy == "channel-wise" and len(self.image_means) != patch.shape[0]:
             raise ValueError(
                 f"Number of means (got a list of size {len(self.image_means)}) and "
                 f"number of channels (got shape {patch.shape} for C(Z)YX) do not match."
             )
+            # TODO: patch can also be of shape SC(Z)YX, e.g., in the case we call dset[:S].
+            # In that case this check will fail.
         if len(additional_arrays) != 0:
             raise NotImplementedError(
                 "Transforming additional arrays is currently not supported for "

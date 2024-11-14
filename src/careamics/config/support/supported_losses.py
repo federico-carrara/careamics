@@ -25,5 +25,6 @@ class SupportedLoss(str, BaseEnum):
     MUSPLIT = "musplit"
     DENOISPLIT = "denoisplit"
     DENOISPLIT_MUSPLIT = "denoisplit_musplit"
+    LAMBDASPLIT = "lambdasplit"
     # CE = "ce"
     # DICE = "dice"

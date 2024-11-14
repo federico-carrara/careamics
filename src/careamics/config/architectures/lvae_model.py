@@ -8,13 +8,17 @@ from typing_extensions import Self
 from .architecture_model import ArchitectureModel
 
 
-# TODO: it is quite confusing to call this LVAEModel, as it is basically a config
 class LVAEModel(ArchitectureModel):
     """LVAE model."""
 
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
     architecture: Literal["LVAE"]
+    algorithm_type: Literal["supervised", "unsupervised"]
+    """Whether the algorithm is supervised or unsupervised.
+    We have: HDN -> unsupervised, μSplit -> supervised, denoiSplit -> supervised,
+    λSplit -> unsupervised."""
+    
     input_shape: int = Field(default=64, ge=8, le=1024)
     multiscale_count: int = Field(default=5)  # TODO clarify
     # 0 - off, len(z_dims) + 1 # TODO can/should be le to z_dims len + 1
@@ -29,12 +33,19 @@ class LVAEModel(ArchitectureModel):
     ] = Field(
         default="ELU",
     )
-
     predict_logvar: Literal[None, "pixelwise"] = None
-
-    analytical_kl: bool = Field(
-        default=False,
-    )
+    analytical_kl: bool = Field(default=False)
+    
+    # λSplit parameters
+    fluorophores: list[str]
+    """A list of the fluorophore names in the image to unmix."""
+    wv_range: tuple[int, int] = Field(default=(400, 700))
+    """The wavelength range of the spectral image."""
+    ref_learnable: bool = Field(default=False)
+    """Whether the reference spectra matrix is learnable."""
+    num_bins: int = Field(default=32)
+    """Number of bins for the spectral data."""
+    
 
     @field_validator("encoder_n_filters")
     @classmethod
@@ -146,25 +157,3 @@ class LVAEModel(ArchitectureModel):
         #         )
 
         return self
-
-    def set_3D(self, is_3D: bool) -> None:
-        """
-        Set 3D model by setting the `conv_dims` parameters.
-
-        Parameters
-        ----------
-        is_3D : bool
-            Whether the algorithm is 3D or not.
-        """
-        raise NotImplementedError("VAE is not implemented yet.")
-
-    def is_3D(self) -> bool:
-        """
-        Return whether the model is 3D or not.
-
-        Returns
-        -------
-        bool
-            Whether the model is 3D or not.
-        """
-        raise NotImplementedError("VAE is not implemented yet.")

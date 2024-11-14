@@ -98,7 +98,7 @@ class DataConfig(BaseModel):
     in SupportedData."""
 
     axes: str
-    """Axes of the data, as defined in SupportedAxes."""
+    """Axes of the data, i.e., combination of 'STCZYX' as defined in SupportedAxes."""
 
     patch_size: Union[list[int]] = Field(..., min_length=2, max_length=3)
     """Patch size, as used during training."""
@@ -107,6 +107,11 @@ class DataConfig(BaseModel):
     """Batch size for training."""
 
     # Optional fields
+    norm_strategy: Optional[Literal["channel-wise", "global"]] = "channel-wise"
+    """Normalization strategy, either channel-wise or global. It is particularly
+    important in the case of multi-channel data."""
+    
+    # TODO: list of floats instead of array for serialization?
     image_means: Optional[list[Float]] = Field(
         default=None, min_length=0, max_length=32
     )

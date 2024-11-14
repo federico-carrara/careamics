@@ -15,7 +15,6 @@ from careamics.config.support import (
     SupportedScheduler,
 )
 from careamics.losses import loss_factory
-from careamics.losses.loss_factory import LVAELossParameters
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
     NoiseModelLikelihood,
@@ -266,29 +265,24 @@ class VAEModule(L.LightningModule):
         # TODO: log algorithm config
         # self.save_hyperparameters(self.algorithm_config.model_dump())
 
-        # create model and loss function
+        # create model
         self.model: nn.Module = model_factory(self.algorithm_config.model)
+
+        # create loss function
         self.noise_model: NoiseModel = noise_model_factory(
             self.algorithm_config.noise_model
         )
-        # TODO: here we can add some code to check whether the noise model is not None
-        # and `self.algorithm_config.noise_model_likelihood_model.noise_model` is,
-        # instead, None. In that case we could assign the noise model to the latter.
-        # This is particular useful when loading an algorithm config from file.
-        # Indeed, in that case the noise model in the nm likelihood is likely
-        # not available since excluded from serializaion.
-        self.noise_model_likelihood: NoiseModelLikelihood = likelihood_factory(
-            self.algorithm_config.noise_model_likelihood_model
+        self.noise_model_likelihood: Optional[NoiseModelLikelihood] = (
+            likelihood_factory(
+                self.algorithm_config.noise_model_likelihood,
+                noise_model=self.noise_model,
+            )
         )
-        self.gaussian_likelihood: GaussianLikelihood = likelihood_factory(
-            self.algorithm_config.gaussian_likelihood_model
+        self.gaussian_likelihood: Optional[GaussianLikelihood] = likelihood_factory(
+            self.algorithm_config.gaussian_likelihood
         )
-        self.loss_parameters = LVAELossParameters(
-            noise_model_likelihood=self.noise_model_likelihood,
-            gaussian_likelihood=self.gaussian_likelihood,
-            # TODO: musplit/denoisplit weights ?
-        )  # type: ignore
-        self.loss_func = loss_factory(self.algorithm_config.loss)
+        self.loss_parameters = self.algorithm_config.loss
+        self.loss_func = loss_factory(self.algorithm_config.loss.loss_type)
 
         # save optimizer and lr_scheduler names and parameters
         self.optimizer_name = self.algorithm_config.optimizer.name
@@ -301,7 +295,7 @@ class VAEModule(L.LightningModule):
             RunningPSNR() for _ in range(self.algorithm_config.model.output_channels)
         ]
 
-    def forward(self, x: Tensor) -> tuple[Tensor, dict[str, Any]]:
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor, dict[str, Any]]:
         """Forward pass.
 
         Parameters
@@ -312,8 +306,11 @@ class VAEModule(L.LightningModule):
 
         Returns
         -------
-        tuple[Tensor, dict[str, Any]]
-            A tuple with the output tensor and additional data from the top-down pass.
+        tuple[Tensor, Tensor, dict[str, Any]]
+            A tuple with:
+            - the remixed tensor (for λSplit).
+            - the output tensor of the LVAE decoder.
+            - additional data from the top-down pass.
         """
         return self.model(x)  # TODO Different model can have more than one output
 
@@ -339,16 +336,23 @@ class VAEModule(L.LightningModule):
             Loss value.
         """
         x, target = batch
+        if self.model.algorithm_type == "unsupervised":
+            target = x
 
         # Forward pass
         out = self.model(x)
 
         # Update loss parameters
-        # TODO rethink loss parameters
-        self.loss_parameters.current_epoch = self.current_epoch
+        self.loss_parameters.kl_params.current_epoch = self.current_epoch
 
         # Compute loss
-        loss = self.loss_func(out, target, self.loss_parameters)  # TODO ugly ?
+        loss = self.loss_func(
+            model_outputs=out,
+            targets=target,
+            config=self.loss_parameters,
+            gaussian_likelihood=self.gaussian_likelihood,
+            noise_model_likelihood=self.noise_model_likelihood,
+        )
 
         # Logging
         # TODO: implement a separate logging method?
@@ -371,28 +375,38 @@ class VAEModule(L.LightningModule):
             Batch index.
         """
         x, target = batch
+        if self.model.algorithm_type == "unsupervised":
+            target = x
 
         # Forward pass
         out = self.model(x)
 
         # Compute loss
-        loss = self.loss_func(out, target, self.loss_parameters)
+        loss = self.loss_func(
+            model_outputs=out,
+            targets=target,
+            config=self.loss_parameters,
+            gaussian_likelihood=self.gaussian_likelihood,
+            noise_model_likelihood=self.noise_model_likelihood,
+        )
 
         # Logging
         # Rename val_loss dict
         loss = {"_".join(["val", k]): v for k, v in loss.items()}
         self.log_dict(loss, on_epoch=True, prog_bar=True)
-        curr_psnr = self.compute_val_psnr(out, target)
-        for i, psnr in enumerate(curr_psnr):
-            self.log(f"val_psnr_ch{i+1}_batch", psnr, on_epoch=True)
+        if self.model.algorithm_type == "supervised":
+            curr_psnr = self.compute_val_psnr(out, target)
+            for i, psnr in enumerate(curr_psnr):
+                self.log(f"val_psnr_ch{i+1}_batch", psnr, on_epoch=True)
 
     def on_validation_epoch_end(self) -> None:
         """Validation epoch end."""
-        psnr_ = self.reduce_running_psnr()
-        if psnr_ is not None:
-            self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)
-        else:
-            self.log("val_psnr", 0.0, on_epoch=True, prog_bar=True)
+        if self.model.algorithm_type == "supervised":
+            psnr_ = self.reduce_running_psnr()
+            if psnr_ is not None:
+                self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)
+            else:
+                self.log("val_psnr", 0.0, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch: Tensor, batch_idx: Any) -> Any:
         """Prediction step.
@@ -473,16 +487,16 @@ class VAEModule(L.LightningModule):
 
         Parameters
         ----------
-        model_outputs : tuple[Tensor, dict[str, Any]]
-            Model outputs. It is a tuple with a tensor representing the predicted mean
-            and (optionally) logvar, and the top-down data dictionary.
+        model_outputs : tuple[Tensor, Tensor, dict[str, Any]]
+            Model outputs. It is a tuple with a tensor for the remixed ouput,
+            the predicted mean with (optionally) logvar, and the top-down data dict.
 
         Returns
         -------
         Tensor
             Reconstructed tensor, i.e., the predicted mean.
         """
-        predictions, _ = model_outputs
+        predictions, _, _ = model_outputs
         if self.model.predict_logvar is None:
             return predictions
         elif self.model.predict_logvar == "pixelwise":
