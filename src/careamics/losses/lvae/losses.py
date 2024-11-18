@@ -474,12 +474,12 @@ def denoisplit_musplit_loss(
     denoisplit_kl = _get_kl_divergence_loss_denoisplit(
         topdown_data=td_data,
         img_shape=targets.shape[2:],
-        kl_type=config.kl_params.loss_type,
+        kl_type=config.kl_params["denoisplit"].loss_type,
     )
     musplit_kl = _get_kl_divergence_loss_musplit(
         topdown_data=td_data,
         img_shape=targets.shape[2:],
-        kl_type=config.kl_params.loss_type,
+        kl_type=config.kl_params["musplit"].loss_type,
     )
     kl_loss = (
         config.denoisplit_weight * denoisplit_kl + config.musplit_weight * musplit_kl

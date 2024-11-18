@@ -48,7 +48,7 @@ class LVAELossConfig(BaseModel):
     """Weight for the muSplit loss (used in the muSplit-denoiSplit loss)."""
     denoisplit_weight: float = 0.9
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
-    kl_params: Union[KLLossConfig, tuple[KLLossConfig, KLLossConfig]] = KLLossConfig()
+    kl_params: Union[KLLossConfig, dict[str, KLLossConfig]]
     """KL loss configuration."""
 
     # TODO: remove?
@@ -63,9 +63,10 @@ class LVAELossConfig(BaseModel):
         elif self.loss_type == "denoisplit":
             assert isinstance(self.kl_params, KLLossConfig)
         elif self.loss_type == "denoisplit_musplit":
-            assert isinstance(self.kl_params, tuple)
-            assert len(self.kl_params) == 2
-            assert isinstance(self.kl_params[0], KLLossConfig)
-            assert isinstance(self.kl_params[1], KLLossConfig)
+            assert isinstance(self.kl_params, dict)
+            assert len(set(self.kl_params.keys())) == set("denoisplit", "musplit")
+            assert isinstance(self.kl_params["denoisplit"], KLLossConfig)
+            assert isinstance(self.kl_params["musplit"], KLLossConfig)
+            
         else:
             raise ValueError(f"Unknown loss type {self.loss_type}.")
