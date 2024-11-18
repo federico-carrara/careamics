@@ -1,8 +1,8 @@
 """Configuration classes for LVAE losses."""
 
-from typing import Literal
+from typing import Literal, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class KLLossConfig(BaseModel):
@@ -48,9 +48,24 @@ class LVAELossConfig(BaseModel):
     """Weight for the muSplit loss (used in the muSplit-denoiSplit loss)."""
     denoisplit_weight: float = 0.9
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
-    kl_params: KLLossConfig = KLLossConfig()
+    kl_params: Union[KLLossConfig, tuple[KLLossConfig, KLLossConfig]] = KLLossConfig()
     """KL loss configuration."""
 
     # TODO: remove?
     non_stochastic: bool = False
     """Whether to sample latents and compute KL."""
+    
+    @model_validator(mode="after")
+    def validate_kl_params(self) -> None:
+        """Validate the KL parameters."""
+        if self.loss_type == "musplit":
+            assert isinstance(self.kl_params, KLLossConfig)
+        elif self.loss_type == "denoisplit":
+            assert isinstance(self.kl_params, KLLossConfig)
+        elif self.loss_type == "denoisplit_musplit":
+            assert isinstance(self.kl_params, tuple)
+            assert len(self.kl_params) == 2
+            assert isinstance(self.kl_params[0], KLLossConfig)
+            assert isinstance(self.kl_params[1], KLLossConfig)
+        else:
+            raise ValueError(f"Unknown loss type {self.loss_type}.")
