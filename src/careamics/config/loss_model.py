@@ -68,9 +68,11 @@ class LVAELossConfig(BaseModel):
                 "with keys 'denoisplit' and 'musplit' and corresponding KLLossConfig's",
                 "as values."
             )
-            assert len(set(self.kl_params.keys())) == set("denoisplit", "musplit")
+            assert set(self.kl_params.keys()) == set(["denoisplit", "musplit"])
             assert isinstance(self.kl_params["denoisplit"], KLLossConfig)
             assert isinstance(self.kl_params["musplit"], KLLossConfig)
             
         else:
             raise ValueError(f"Unknown loss type {self.loss_type}.")
+        
+        return self
