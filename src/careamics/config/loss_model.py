@@ -63,7 +63,11 @@ class LVAELossConfig(BaseModel):
         elif self.loss_type == "denoisplit":
             assert isinstance(self.kl_params, KLLossConfig)
         elif self.loss_type == "denoisplit_musplit":
-            assert isinstance(self.kl_params, dict)
+            assert isinstance(self.kl_params, dict), (
+                "With 'denoisplit_musplit' loss, kl_params must be a dictionary",
+                "with keys 'denoisplit' and 'musplit' and corresponding KLLossConfig's",
+                "as values."
+            )
             assert len(set(self.kl_params.keys())) == set("denoisplit", "musplit")
             assert isinstance(self.kl_params["denoisplit"], KLLossConfig)
             assert isinstance(self.kl_params["musplit"], KLLossConfig)
