@@ -20,6 +20,36 @@ class GroupType(Enum):
     CONTROL = ["control", "untreated"]
     ARSENITE = ["arsenite", "NaAsO", "Ars"]
     THARPS = ["TG", "tharps"]
+
+
+def _str_to_group_type(
+    groups: Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]]
+) -> Sequence[GroupType]:
+    """Convert a list of strings to `GroupType` instances.
+    
+    Parameters
+    ----------
+    groups : Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]]
+        The groups of samples to load.
+    
+    Returns
+    -------
+    Sequence[GroupType]
+        The list of `GroupType` instances.
+    """
+    STR_TO_GROUP_TYPE = {
+        "control": GroupType.CONTROL,
+        "arsenite": GroupType.ARSENITE,
+        "tharps": GroupType.THARPS,
+    }
+    if all([isinstance(g, str) for g in groups]):
+        return [STR_TO_GROUP_TYPE[g] for g in groups]
+    elif all([isinstance(g, GroupType) for g in groups]):
+        return groups
+    else:
+        ValueError(
+            "Invalid group type. All entries must be str or `GroupType` instances."
+        )
     
 
 def _load_img(fpath: Union[str, Path]) -> NDArray:
@@ -53,11 +83,11 @@ def _load_img(fpath: Union[str, Path]) -> NDArray:
     return img
     
 
-def _get_fnames(
+def get_fnames(
     data_path: Union[str, Path],
     dset_type: Literal["astrocytes", "neurons"],
     img_type: Literal["raw", "unmixed"],
-    groups: Sequence[GroupType],
+    groups: Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]],
     dim: Literal["2D", "3D"],
 ) -> list[str]:
     """Get the filenames of the images to load.
@@ -70,7 +100,7 @@ def _get_fnames(
         The type of dataset to load.
     img_type : Literal["raw", "unmixed"]
         The type of image to load, i.e., either raw multispectral or unmixed stacks.
-    groups : Sequence[AstroGroupType]
+    groups : Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]]
         The groups of samples to load.
     dim : Literal["2D", "3D"]
         The dimensionality of the images to load.
@@ -84,6 +114,7 @@ def _get_fnames(
     dim_dir = "Z-stacks" if dim == "3D" else "slices"
     data_path = os.path.join(data_path, dset_type, dim_dir, img_type)
     subdirs = os.listdir(data_path)
+    groups = _str_to_group_type(groups)
     for subdir in subdirs:
         subdir_path = os.path.join(data_path, subdir)
         for group in groups:
@@ -117,7 +148,7 @@ def load_astro_neuron_data(
     data_path: Union[str, Path],
     dset_type: Literal["astrocytes", "neurons"],
     img_type: Literal["raw", "unmixed"],
-    groups: Sequence[GroupType],
+    groups: Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]],
     dim: Literal["2D", "3D"] = "2D",
 ) -> NDArray:
     """Load data from neurons & astrocytes dataset.
@@ -133,7 +164,7 @@ def load_astro_neuron_data(
         The type of dataset to load.
     img_type : Literal["raw", "unmixed"]
         The type of image to load, i.e., either raw multispectral or unmixed stacks.
-    groups : Sequence[GroupType]
+    groups : Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]]
         The groups of samples to load.
     dim : Literal["2D", "3D"]
         Whether to load 3D Z-stacks or 2D slices.
@@ -144,12 +175,12 @@ def load_astro_neuron_data(
         The loaded data. Shape is (N, C, Z, Y, X) if `get_2D` is False, otherwise
         (N, C, Y, X).
     """
-    fnames = _get_fnames(
+    fnames = get_fnames(
         data_path=data_path, 
         dset_type=dset_type, 
         dim=dim,
         img_type=img_type, 
-        groups=groups
+        groups=_str_to_group_type(groups)
     )
     print(f"Dataset: {dset_type} -- {img_type} -- {[g.name for g in groups]} -- {dim}")
     print(f"Found {len(fnames)} images.")
