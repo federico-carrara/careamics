@@ -6,6 +6,7 @@ from typing import Literal, Sequence, Union
 import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
+import tifffile as tiff
 
 from careamics.dataset.dataset_utils.readers.utils import load_czi
 
@@ -112,14 +113,18 @@ def load_astro_neuron_data(
     """
     fnames = _get_fnames(data_path, dset_type, img_type, groups)
     print(f"Loading {len(fnames)} images...")
-    print(f"File names: {fnames}")
     data = []
     for fname in tqdm(fnames, desc="Loading images"):
-        img = load_czi(fname).squeeze()
+        img = load_czi(fname).squeeze() # shape: (C, Z, Y, X)
         if get_2D:
-            img = _get_mid_slice(img)
-        data.append(img)
-    return np.array(data)
+            img = _get_mid_slice(img) # TODO: load it once done (if os.file exist ... else ...)
+        # --- tmp
+        save_path = fname.replace("Z-stacks", "slices").replace(".czi", ".tif")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        tiff.imwrite(save_path, img)
+        # ---
+    #     data.append(img) # TODO: use generator for memory efficiency (yield)
+    # return np.array(data)
 
 
 if __name__ == "__main__":
@@ -127,7 +132,7 @@ if __name__ == "__main__":
     imgs = load_astro_neuron_data(
         data_path=DATA_PATH,
         dset_type="neurons",
-        img_type="unmixed",
-        groups=[GroupType.CONTROL, GroupType.ARSENITE],
+        img_type="raw",
+        groups=[GroupType.CONTROL, GroupType.ARSENITE, GroupType.THARPS],
         get_2D=True
     )
