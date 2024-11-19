@@ -134,20 +134,10 @@ def load_astro_neuron_data(
         img_type=img_type, 
         groups=groups
     )
-    print(f"Loading {len(fnames)} images...")
+    print(f"Dataset: {dset_type} -- {img_type} -- {[g.name for g in groups]} -- {dim}")
+    print(f"Found {len(fnames)} images.")
     data = []
     for fname in tqdm(fnames, desc="Loading images"):
         img = _load_img(fname)
         data.append(img) # TODO: use generator for memory efficiency (yield)
     return np.array(data)
-
-
-if __name__ == "__main__":
-    DATA_PATH = Path("/group/jug/federico/data/neurons_and_astrocytes")
-    imgs = load_astro_neuron_data(
-        data_path=DATA_PATH,
-        dset_type="neurons",
-        img_type="raw",
-        groups=[GroupType.CONTROL, GroupType.ARSENITE, GroupType.THARPS],
-        dim="2D"
-    )
