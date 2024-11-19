@@ -175,12 +175,13 @@ def load_astro_neuron_data(
         The loaded data. Shape is (N, C, Z, Y, X) if `get_2D` is False, otherwise
         (N, C, Y, X).
     """
+    groups = _str_to_group_type(groups)
     fnames = get_fnames(
         data_path=data_path, 
         dset_type=dset_type, 
         dim=dim,
         img_type=img_type, 
-        groups=_str_to_group_type(groups)
+        groups=groups
     )
     print(f"Dataset: {dset_type} -- {img_type} -- {[g.name for g in groups]} -- {dim}")
     print(f"Found {len(fnames)} images.")
