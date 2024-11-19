@@ -10,7 +10,6 @@ import tifffile as tiff
 
 from careamics.dataset.dataset_utils.readers.utils import load_czi
 
-# NOTE: for the moment we solely use on raw data
 
 class GroupType(Enum):
     """The groups of samples in the dataset.
@@ -24,13 +23,32 @@ class GroupType(Enum):
     
 
 def _load_img(fpath: Union[str, Path]) -> NDArray:
+    """Load an image from a file.
+    
+    It can load images from CZI or TIFF files.
+    
+    Parameters
+    ----------
+    fpath : Union[str, Path]
+        The path to the image file.
+    
+    Raises
+    ------
+    ValueError
+        If the file format is not supported. Sypported formats are CZI and TIFF.
+    
+    Returns
+    -------
+    NDArray
+        The loaded image.
+    """
     if fpath.endswith(".czi"):
         img = load_czi(fpath).squeeze()
     elif fpath.endswith(".tif") or fpath.endswith(".tiff"):
         img = tiff.imread(fpath)
     else:
         raise ValueError(
-            f"Unsupported file format: {fpath}. Supported formats are .czi and .tif."
+            f"Unsupported file format: {fpath}. Supported formats are CZI and TIFF."
         )
     return img
     
@@ -62,7 +80,6 @@ def _get_fnames(
     list[str]
         The list of filenames to load.
     """
-    assert img_type == "raw", "Only raw data is supported for now."
     fnames = []
     dim_dir = "Z-stacks" if dim == "3D" else "slices"
     data_path = os.path.join(data_path, dset_type, dim_dir, img_type)
