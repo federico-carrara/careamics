@@ -23,11 +23,24 @@ class GroupType(Enum):
     THARPS = ["TG", "tharps"]
     
 
+def _load_img(fpath: Union[str, Path]) -> NDArray:
+    if fpath.endswith(".czi"):
+        img = load_czi(fpath).squeeze()
+    elif fpath.endswith(".tif") or fpath.endswith(".tiff"):
+        img = tiff.imread(fpath)
+    else:
+        raise ValueError(
+            f"Unsupported file format: {fpath}. Supported formats are .czi and .tif."
+        )
+    return img
+    
+
 def _get_fnames(
     data_path: Union[str, Path],
     dset_type: Literal["astrocytes", "neurons"],
     img_type: Literal["raw", "unmixed"],
     groups: Sequence[GroupType],
+    dim: Literal["2D", "3D"],
 ) -> list[str]:
     """Get the filenames of the images to load.
     
@@ -41,6 +54,8 @@ def _get_fnames(
         The type of image to load, i.e., either raw multispectral or unmixed stacks.
     groups : Sequence[AstroGroupType]
         The groups of samples to load.
+    dim : Literal["2D", "3D"]
+        The dimensionality of the images to load.
     
     Returns
     -------
@@ -49,7 +64,8 @@ def _get_fnames(
     """
     assert img_type == "raw", "Only raw data is supported for now."
     fnames = []
-    data_path = os.path.join(data_path, dset_type, "Z-stacks", img_type)
+    dim_dir = "Z-stacks" if dim == "3D" else "slices"
+    data_path = os.path.join(data_path, dset_type, dim_dir, img_type)
     subdirs = os.listdir(data_path)
     for subdir in subdirs:
         subdir_path = os.path.join(data_path, subdir)
@@ -85,7 +101,7 @@ def load_astro_neuron_data(
     dset_type: Literal["astrocytes", "neurons"],
     img_type: Literal["raw", "unmixed"],
     groups: Sequence[GroupType],
-    get_2D: bool
+    dim: Literal["2D", "3D"] = "2D",
 ) -> NDArray:
     """Load data from neurons & astrocytes dataset.
     
@@ -100,10 +116,10 @@ def load_astro_neuron_data(
         The type of dataset to load.
     img_type : Literal["raw", "unmixed"]
         The type of image to load, i.e., either raw multispectral or unmixed stacks.
-    groups : Sequence[NeuronGroupType]
+    groups : Sequence[GroupType]
         The groups of samples to load.
-    get_2D : bool
-        Whether to return the middle Z-slice of stacks.
+    dim : Literal["2D", "3D"]
+        Whether to load 3D Z-stacks or 2D slices.
         
     Returns
     -------
@@ -111,20 +127,19 @@ def load_astro_neuron_data(
         The loaded data. Shape is (N, C, Z, Y, X) if `get_2D` is False, otherwise
         (N, C, Y, X).
     """
-    fnames = _get_fnames(data_path, dset_type, img_type, groups)
+    fnames = _get_fnames(
+        data_path=data_path, 
+        dset_type=dset_type, 
+        dim=dim,
+        img_type=img_type, 
+        groups=groups
+    )
     print(f"Loading {len(fnames)} images...")
     data = []
     for fname in tqdm(fnames, desc="Loading images"):
-        img = load_czi(fname).squeeze() # shape: (C, Z, Y, X)
-        if get_2D:
-            img = _get_mid_slice(img) # TODO: load it once done (if os.file exist ... else ...)
-        # --- tmp
-        save_path = fname.replace("Z-stacks", "slices").replace(".czi", ".tif")
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        tiff.imwrite(save_path, img)
-        # ---
-    #     data.append(img) # TODO: use generator for memory efficiency (yield)
-    # return np.array(data)
+        img = _load_img(fname)
+        data.append(img) # TODO: use generator for memory efficiency (yield)
+    return np.array(data)
 
 
 if __name__ == "__main__":
@@ -134,5 +149,5 @@ if __name__ == "__main__":
         dset_type="neurons",
         img_type="raw",
         groups=[GroupType.CONTROL, GroupType.ARSENITE, GroupType.THARPS],
-        get_2D=True
+        dim="2D"
     )
