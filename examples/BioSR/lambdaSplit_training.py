@@ -195,7 +195,7 @@ def train(
     
     # Set working directory
     algo = "lambdasplit"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}_BioSR_F{F}_N{N}")
+    workdir, exp_tag = get_workdir(root_dir, f"{algo}_BioSR/BioSR_F{F}_N{N}")
     print(f"Current workdir: {workdir}")
     
     # Create configs

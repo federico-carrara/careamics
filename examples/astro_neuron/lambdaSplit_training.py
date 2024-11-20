@@ -47,7 +47,7 @@ dset_type: Literal["astrocytes", "neurons"] = "astrocytes"
 """The type of dataset to use."""
 img_type : Literal["raw", "unmixed"] = "raw"
 """The type of image to load, i.e., either raw multispectral or unmixed stacks."""
-groups : Sequence[Literal["control", "arsenite", "tharps"]] = ["control"]
+groups : Sequence[Literal["control", "arsenite", "tharps"]] = ["control", "arsenite", "tharps"]
 """The groups of samples to load."""
 dim : Literal["2D", "3D"] = "2D"
 """The dimensionality of the images to load."""
