@@ -2,6 +2,7 @@
 
 __all__ = [
     "get_read_func",
+    "read_czi",
     "read_tiff",
     "read_zarr",
     "ReadFunc",
@@ -10,3 +11,4 @@ __all__ = [
 from .get_func import ReadFunc, get_read_func
 from .tiff import read_tiff
 from .zarr import read_zarr
+from .czi import read_czi

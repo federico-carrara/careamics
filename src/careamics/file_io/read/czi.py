@@ -5,7 +5,7 @@ import czifile as czi
 from numpy.typing import NDArray
 
 
-def load_czi(
+def read_czi(
     path: Union[str, Path], load_metadata: bool =  False
 ) -> Union[NDArray, tuple[NDArray, dict]]:
     """Load a CZI file and return the image and optionally the metadata.

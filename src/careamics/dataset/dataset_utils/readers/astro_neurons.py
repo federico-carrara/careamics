@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 import tifffile as tiff
 
-from careamics.dataset.dataset_utils.readers.utils import load_czi
+from careamics.file_io.read import read_czi
 
 
 class GroupType(Enum):
@@ -73,7 +73,7 @@ def _load_img(fpath: Union[str, Path]) -> NDArray:
         The loaded image.
     """
     if fpath.endswith(".czi"):
-        img = load_czi(fpath).squeeze()
+        img = read_czi(fpath).squeeze()
     elif fpath.endswith(".tif") or fpath.endswith(".tiff"):
         img = tiff.imread(fpath)
     else:
