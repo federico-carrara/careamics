@@ -6,6 +6,7 @@ from typing import Callable, Literal, Union
 
 import numpy as np
 from numpy.typing import NDArray
+from tqdm import tqdm
 
 from ...utils.logging import get_logger
 from ..dataset_utils import reshape_array
@@ -180,7 +181,7 @@ def prepare_patches_unsupervised(
     """
     means, stds, num_samples = 0, 0, 0
     all_patches = []
-    for filename in train_files:
+    for filename in tqdm(train_files, desc="Reading files"):
         try:
             sample: np.ndarray = read_source_func(filename, axes)
             means += sample.mean() # TODO: what do we need this for?
