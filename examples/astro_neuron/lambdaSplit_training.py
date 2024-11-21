@@ -1,10 +1,9 @@
-import argparse
 import os
-import glob
 import json
+import glob
 from pathlib import Path
 import socket
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, Sequence
 
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning import Trainer
@@ -29,20 +28,29 @@ from careamics.config.nm_model import GaussianMixtureNMConfig, MultiChannelNMCon
 from careamics.config.optimizer_models import LrSchedulerModel, OptimizerModel
 from careamics.lightning import VAEModule
 from careamics.dataset import InMemoryDataset
+from careamics.dataset.dataset_utils.readers.astro_neurons import get_fnames
 from careamics.utils.io_utils import get_git_status, get_workdir
 
 
-# Model Parameters
+# General Parameters
 loss_type: Optional[Literal["musplit", "denoisplit", "denoisplit_musplit", "lambdasplit"]] = "lambdasplit"
 """The type of reconstruction loss (i.e., likelihood) to use."""
-
-# Data Parameters
 batch_size: int = 32
 """The batch size for training."""
 patch_size: list[int] = [64, 64]
 """Spatial size of the input patches."""
 norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
 """Normalization strategy for the input data."""
+
+# Data Parameters
+dset_type: Literal["astrocytes", "neurons"] = "astrocytes"
+"""The type of dataset to use."""
+img_type : Literal["raw", "unmixed"] = "raw"
+"""The type of image to load, i.e., either raw multispectral or unmixed stacks."""
+groups : Sequence[Literal["control", "arsenite", "tharps"]] = ["control", "arsenite", "tharps"]
+"""The groups of samples to load."""
+dim : Literal["2D", "3D"] = "2D"
+"""The dimensionality of the images to load."""
 
 # Training Parameters
 lr: float = 1e-3
@@ -77,10 +85,7 @@ def create_lambda_split_lightning_model(
     algorithm: str,
     loss_type: str,
     img_size: int,
-    target_ch: int,
-    fluorophores: list[str],
-    num_bins: int,
-    wavelength_range: tuple[int, int],
+    spectral_metadata: dict[str, Any],
     NM_paths: Optional[list[Path]] = None,
     training_config: TrainingConfig = TrainingConfig(),
     data_mean: Optional[torch.Tensor] = None,
@@ -94,12 +99,12 @@ def create_lambda_split_lightning_model(
         input_shape=img_size,
         multiscale_count=1,
         z_dims=[128, 128, 128, 128],
-        output_channels=target_ch,
+        output_channels=len(spectral_metadata["fluorophores"]),
         predict_logvar=None,
         analytical_kl=False,
-        fluorophores=fluorophores,
-        wv_range=wavelength_range,
-        num_bins=num_bins,
+        fluorophores=spectral_metadata["fluorophores"],
+        wv_range=spectral_metadata["wavelength_range"],
+        num_bins=spectral_metadata["num_bins"],
         ref_learnable=False,
     )
     
@@ -188,14 +193,12 @@ def train(
         The directory where the data is stored.
     """
     # Load metadata
-    with open(os.path.join(data_dir, "sim_metadata.json"), "r") as f:
+    with open(os.path.join(data_dir, dset_type, "info/metadata.json")) as f:
         metadata = json.load(f)
-    F = len(metadata["fluorophores"])
-    N = metadata["num_bins"]
     
     # Set working directory
     algo = "lambdasplit"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}_BioSR_F{F}_N{N}")
+    workdir, exp_tag = get_workdir(root_dir, f"{algo}_{dset_type[:5]}")
     print(f"Current workdir: {workdir}")
     
     # Create configs
@@ -218,16 +221,19 @@ def train(
     )
     
     # Load data
-    path_to_imgs = os.path.join(data_dir, "imgs/digital")
-    fnames = [
-        Path(path_to_imgs) / fname 
-        for fname in glob.glob(os.path.join(path_to_imgs, "*.tif"))
-    ]
+    fnames = get_fnames(
+        data_path=data_dir,
+        dset_type=dset_type,
+        img_type=img_type,
+        groups=groups,
+        dim=dim
+    )
+    fnames = [Path(f) for f in fnames]
     train_dset = InMemoryDataset(
         data_config=data_config,
         inputs=fnames,
     )
-    val_dset = train_dset.split_dataset(percentage=0.15)
+    val_dset = train_dset.split_dataset(percentage=0.1)
 
     train_dloader = DataLoader(
         train_dset,
@@ -249,11 +255,8 @@ def train(
         algorithm="lambdasplit",
         loss_type=loss_type,
         img_size=patch_size[0],
-        target_ch=len(metadata["fluorophores"]),
-        fluorophores=metadata["fluorophores"],
+        spectral_metadata=metadata,
         training_config=training_config,
-        num_bins=metadata["num_bins"],
-        wavelength_range=metadata["wavelength_range"],
     )
     
     # Define the logger
@@ -273,14 +276,14 @@ def train(
         f.write(training_config.model_dump_json(indent=4))
     with open(os.path.join(workdir, "data_config.json"), "w") as f:
         f.write(data_config.model_dump_json(indent=4))
-    with open(os.path.join(workdir, "sim_metadata.json"), "w") as f:
+    with open(os.path.join(workdir, "metadata.json"), "w") as f:
         json.dump(metadata, f, indent=4)
         
     # Save Configs in WanDB
     custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
     custom_logger.experiment.config.update({"training": training_config.model_dump()})
     custom_logger.experiment.config.update({"data": data_config.model_dump()})
-    custom_logger.experiment.config.update({"sim_metadata": metadata})
+    custom_logger.experiment.config.update({"metadata": metadata})
     
     # Define callbacks (e.g., ModelCheckpoint, EarlyStopping, etc.)
     custom_callbacks = [
@@ -322,8 +325,5 @@ def train(
 
 if __name__ == "__main__":
     ROOT_DIR = "/group/jug/federico/lambdasplit_training/"
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root-dir", type=str)
-    parser.add_argument("--data-dir", type=str)
-    args = parser.parse_args()
-    train(root_dir=args.root_dir, data_dir=args.data_dir)
+    DATA_DIR = "/group/jug/federico/data/neurons_and_astrocytes"
+    train(root_dir=ROOT_DIR, data_dir=DATA_DIR)
