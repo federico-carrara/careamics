@@ -5,6 +5,7 @@ from pathlib import Path
 import socket
 from typing import Any, Literal, Optional, Sequence
 
+from pydantic import BaseModel, ConfigDict
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import (
@@ -32,6 +33,22 @@ from careamics.dataset.dataset_utils.readers.astro_neurons import get_fnames
 from careamics.utils.io_utils import get_git_status, get_workdir
 
 
+# pydantic model for additional λSplit parameters
+# TODO: move this to the experiment repo when it will be there
+class ExtraLambdaParameters(BaseModel):
+    model_config = ConfigDict(
+        validate_assignment=True, validate_default=True, extra="allow"
+    )
+    dset_type: Literal["astrocytes", "neurons"]
+    """The type of dataset to use."""
+    img_type : Literal["raw", "unmixed"]
+    """The type of image to load, i.e., either raw multispectral or unmixed stacks."""
+    groups : Sequence[Literal["control", "arsenite", "tharps"]]
+    """The groups of samples to load."""
+    dim : Literal["2D", "3D"] = "2D"
+    """The dimensionality of the images to load."""
+
+
 # General Parameters
 loss_type: Optional[Literal["musplit", "denoisplit", "denoisplit_musplit", "lambdasplit"]] = "lambdasplit"
 """The type of reconstruction loss (i.e., likelihood) to use."""
@@ -42,15 +59,13 @@ patch_size: list[int] = [64, 64]
 norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
 """Normalization strategy for the input data."""
 
-# Data Parameters
-dset_type: Literal["astrocytes", "neurons"] = "astrocytes"
-"""The type of dataset to use."""
-img_type : Literal["raw", "unmixed"] = "raw"
-"""The type of image to load, i.e., either raw multispectral or unmixed stacks."""
-groups : Sequence[Literal["control", "arsenite", "tharps"]] = ["control", "arsenite", "tharps"]
-"""The groups of samples to load."""
-dim : Literal["2D", "3D"] = "2D"
-"""The dimensionality of the images to load."""
+# λSplit Parameters
+lambda_params = ExtraLambdaParameters(
+    dset_type="astrocytes",
+    img_type="raw",
+    groups=["control", "arsenite", "tharps"],
+    dim="2D",
+)
 
 # Training Parameters
 lr: float = 1e-3
@@ -193,12 +208,12 @@ def train(
         The directory where the data is stored.
     """
     # Load metadata
-    with open(os.path.join(data_dir, dset_type, "info/metadata.json")) as f:
+    with open(os.path.join(data_dir, lambda_params.dset_type, "info/metadata.json")) as f:
         metadata = json.load(f)
     
     # Set working directory
     algo = "lambdasplit"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}_{dset_type[:5]}")
+    workdir, exp_tag = get_workdir(root_dir, f"{algo}_{lambda_params.dset_type[:5]}")
     print(f"Current workdir: {workdir}")
     
     # Create configs
@@ -223,10 +238,10 @@ def train(
     # Load data
     fnames = get_fnames(
         data_path=data_dir,
-        dset_type=dset_type,
-        img_type=img_type,
-        groups=groups,
-        dim=dim
+        dset_type=lambda_params.dset_type,
+        img_type=lambda_params.img_type,
+        groups=lambda_params.groups,
+        dim=lambda_params.dim
     )
     fnames = [Path(f) for f in fnames]
     train_dset = InMemoryDataset(
@@ -278,12 +293,15 @@ def train(
         f.write(data_config.model_dump_json(indent=4))
     with open(os.path.join(workdir, "metadata.json"), "w") as f:
         json.dump(metadata, f, indent=4)
+    with open(os.path.join(workdir, "lambda_params.json"), "w") as f:
+        f.write(lambda_params.model_dump_json(indent=4))
         
     # Save Configs in WanDB
     custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
     custom_logger.experiment.config.update({"training": training_config.model_dump()})
     custom_logger.experiment.config.update({"data": data_config.model_dump()})
     custom_logger.experiment.config.update({"metadata": metadata})
+    custom_logger.experiment.config.update({"lambda_params": lambda_params.model_dump()})
     
     # Define callbacks (e.g., ModelCheckpoint, EarlyStopping, etc.)
     custom_callbacks = [
