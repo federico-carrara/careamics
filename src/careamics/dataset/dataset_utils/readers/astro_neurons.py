@@ -146,8 +146,8 @@ def _get_mid_slice(img: NDArray) -> NDArray:
 
 def load_astro_neuron_data(
     data_path: Union[str, Path],
-    dset_type: Literal["astrocytes", "neurons"],
-    img_type: Literal["raw", "unmixed"],
+    dset_type: Literal["astrocytes", "neurons"], # TODO: change name
+    img_type: Literal["raw", "unmixed"], # TODO: change name
     groups: Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]],
     dim: Literal["2D", "3D"] = "2D",
 ) -> NDArray:
