@@ -29,7 +29,7 @@ from careamics.config.nm_model import GaussianMixtureNMConfig, MultiChannelNMCon
 from careamics.config.optimizer_models import LrSchedulerModel, OptimizerModel
 from careamics.lightning import VAEModule
 from careamics.dataset import InMemoryDataset
-from careamics.dataset.dataset_utils.readers.astro_neurons import get_fnames
+from careamics.dataset.dataset_utils.readers.astro_neurons import get_fnames, get_train_test_fnames
 from careamics.utils.io_utils import get_git_status, get_workdir
 
 
@@ -63,7 +63,7 @@ norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
 lambda_params = ExtraLambdaParameters(
     dset_type="astrocytes",
     img_type="raw",
-    groups=["control", "arsenite", "tharps"],
+    groups=["control"],
     dim="2D",
 )
 
@@ -76,7 +76,7 @@ earlystop_patience: int = 200
 """The patience for the learning rate scheduler."""
 max_epochs: int = 400
 """The maximum number of epochs to train for."""
-num_workers: int = 4
+num_workers: int = 3
 """The number of workers to use for data loading."""
 
 # Additional not to touch parameters
@@ -244,11 +244,17 @@ def train(
         dim=lambda_params.dim
     )
     fnames = [Path(f) for f in fnames]
+    train_fnames, val_fnames = get_train_test_fnames(
+        fnames, test_percent=0.1, deterministic=True
+    )
     train_dset = InMemoryDataset(
         data_config=data_config,
-        inputs=fnames,
+        inputs=train_fnames,
     )
-    val_dset = train_dset.split_dataset(percentage=0.1)
+    val_dset = InMemoryDataset(
+        data_config=data_config,
+        inputs=val_fnames,
+    )
 
     train_dloader = DataLoader(
         train_dset,

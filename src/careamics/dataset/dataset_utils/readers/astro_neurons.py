@@ -144,6 +144,40 @@ def _get_mid_slice(img: NDArray) -> NDArray:
     return img[:, mid_z, :, :]
 
 
+def get_train_test_fnames(
+    fnames: list[str],
+    test_percent: float = 0.1,
+    stratify: bool = False,
+    deterministic: bool = False,
+) -> list[list[str], list[str]]:
+    """Split the list of filenames into training and testing sets.
+    
+    Parameters
+    ----------
+    fnames : list[str]
+        The list of filenames to split.
+    test_percent : float
+        The percentage of data to use for testing.
+    stratify : bool
+        Whether to stratify the split by group. Default is False.
+    deterministic : bool
+        Whether to use a fixed seed for reproducibility. Default is False.
+        
+    Returns
+    -------
+    list[list[str], list[str]]
+        The training and testing sets.
+    """
+    n_test = int(len(fnames) * test_percent)
+    n_train = len(fnames) - n_test
+    if stratify:
+        raise NotImplementedError("Stratified split not implemented yet.")
+    if deterministic:
+        np.random.seed(42)
+    np.random.shuffle(fnames)
+    return fnames[:n_train], fnames[n_train:]
+    
+
 def load_astro_neuron_data(
     data_path: Union[str, Path],
     dset_type: Literal["astrocytes", "neurons"], # TODO: change name
