@@ -168,14 +168,16 @@ def get_train_test_fnames(
     list[list[str], list[str]]
         The training and testing sets.
     """
-    n_test = int(len(fnames) * test_percent)
-    n_train = len(fnames) - n_test
+    n_train = int(len(fnames) * (1 - test_percent))
     if stratify:
         raise NotImplementedError("Stratified split not implemented yet.")
     if deterministic:
-        np.random.seed(42)
-    np.random.shuffle(fnames)
-    return fnames[:n_train], fnames[n_train:]
+        return fnames[:n_train], fnames[n_train:]
+    else:
+        train_idxs = np.random.choice(len(fnames), n_train, replace=False)
+        test_idxs = np.setdiff1d(np.arange(len(fnames)), train_idxs)
+        return [fnames[i] for i in train_idxs], [fnames[i] for i in test_idxs]
+        
     
 
 def load_astro_neuron_data(
