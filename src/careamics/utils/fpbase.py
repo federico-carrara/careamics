@@ -129,7 +129,12 @@ def get_fluorophore(name: str) -> dict:
     if fluor_info["type"] == "d":
         return get_dye_by_id(fluor_info["id"])
     elif fluor_info["type"] == "p":
-        return get_protein_by_id(fluor_info["id"])
+        fp = get_protein_by_id(fluor_info["id"])
+        # a protein can have different states, we take the default one
+        return next(
+            st for st in fp["states"]
+            if st["id"] == fp["defaultState"]["id"]
+        )
     raise ValueError(f"Invalid fluorophore type {fluor_info['type']!r}")
 
 
@@ -152,12 +157,8 @@ def get_fp_emission_spectrum(name: str) -> Optional[torch.Tensor]:
     Optional[torch.Tensor]
         The emission spectrum of the fluorophore. Shape is [W, 2].
     """
-    flurophore = get_fluorophore(name)
-    state = next(
-        st for st in flurophore["states"]
-        if st["id"] == flurophore["defaultState"]["id"]
-    )
+    fluorophore = get_fluorophore(name)
     spectrum = next(
-        (sp["data"] for sp in state["spectra"] if sp["subtype"] == "EM"), None
+        (sp["data"] for sp in fluorophore["spectra"] if sp["subtype"] == "EM"), None
     )
     return torch.tensor(spectrum) if spectrum is not None else None
