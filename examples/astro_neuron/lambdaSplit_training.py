@@ -1,3 +1,4 @@
+import argparse
 import os
 import json
 import glob
@@ -197,6 +198,7 @@ def create_lambda_split_lightning_model(
 def train(
     root_dir: str,
     data_dir: str,
+    logging: bool = True,
 ) -> None:
     """Train the lambdaSplit model.
     
@@ -206,15 +208,18 @@ def train(
         The root directory where the training results will be saved.
     data_dir : str
         The directory where the data is stored.
+    logging : bool
+        Whether to log the results and configs.
     """
     # Load metadata
     with open(os.path.join(data_dir, lambda_params.dset_type, "info/metadata.json")) as f:
         metadata = json.load(f)
     
     # Set working directory
-    algo = "lambdasplit"
-    workdir, exp_tag = get_workdir(root_dir, f"{algo}_{lambda_params.dset_type[:5]}")
-    print(f"Current workdir: {workdir}")
+    if logging:
+        algo = "lambdasplit"
+        workdir, exp_tag = get_workdir(root_dir, f"{algo}_{lambda_params.dset_type[:5]}")
+        print(f"Current workdir: {workdir}")
     
     # Create configs
     training_config = TrainingConfig(
@@ -280,27 +285,28 @@ def train(
         training_config=training_config,
     )
     
-    # Define the logger
-    custom_logger = WandbLogger(
-        name=os.path.join(socket.gethostname(), exp_tag),
-        save_dir=workdir,
-        project="_".join(("careamics", algo)),
-    )
-    
-    # Save configs and git status (for debugging)
-    algo_config = lightning_model.algorithm_config
-    with open(os.path.join(workdir, "git_config.json"), "w") as f:
-        json.dump(get_git_status(), f, indent=4)
-    with open(os.path.join(workdir, "algorithm_config.json"), "w") as f:
-        f.write(algo_config.model_dump_json(indent=4))
-    with open(os.path.join(workdir, "training_config.json"), "w") as f:
-        f.write(training_config.model_dump_json(indent=4))
-    with open(os.path.join(workdir, "data_config.json"), "w") as f:
-        f.write(data_config.model_dump_json(indent=4))
-    with open(os.path.join(workdir, "metadata.json"), "w") as f:
-        json.dump(metadata, f, indent=4)
-    with open(os.path.join(workdir, "lambda_params.json"), "w") as f:
-        f.write(lambda_params.model_dump_json(indent=4))
+    if logging:
+        # Define the logger
+        custom_logger = WandbLogger(
+            name=os.path.join(socket.gethostname(), exp_tag),
+            save_dir=workdir,
+            project="_".join(("careamics", algo)),
+        )
+        
+        # Save configs and git status (for debugging)
+        algo_config = lightning_model.algorithm_config
+        with open(os.path.join(workdir, "git_config.json"), "w") as f:
+            json.dump(get_git_status(), f, indent=4)
+        with open(os.path.join(workdir, "algorithm_config.json"), "w") as f:
+            f.write(algo_config.model_dump_json(indent=4))
+        with open(os.path.join(workdir, "training_config.json"), "w") as f:
+            f.write(training_config.model_dump_json(indent=4))
+        with open(os.path.join(workdir, "data_config.json"), "w") as f:
+            f.write(data_config.model_dump_json(indent=4))
+        with open(os.path.join(workdir, "metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=4)
+        with open(os.path.join(workdir, "lambda_params.json"), "w") as f:
+            f.write(lambda_params.model_dump_json(indent=4))
         
     # Save Configs in WanDB
     custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
@@ -318,16 +324,19 @@ def train(
             mode="min",
             verbose=True,
         ),
-        ModelCheckpoint(
-            dirpath=workdir,
-            filename="best-{epoch}",
-            monitor="val_loss",
-            save_top_k=1,
-            save_last=True,
-            mode="min",
-        ),
         LearningRateMonitor(logging_interval="epoch"),
     ]
+    if logging:
+        custom_callbacks.append(
+            ModelCheckpoint(
+                dirpath=workdir,
+                filename="best-{epoch}",
+                monitor="val_loss",
+                save_top_k=1,
+                save_last=True,
+                mode="min",
+            ),
+        )
     
     trainer = Trainer(
         max_epochs=training_config.num_epochs,
@@ -350,4 +359,11 @@ def train(
 if __name__ == "__main__":
     ROOT_DIR = "/group/jug/federico/lambdasplit_training/"
     DATA_DIR = "/group/jug/federico/data/neurons_and_astrocytes"
-    train(root_dir=ROOT_DIR, data_dir=DATA_DIR)
+    parser = argparse.ArgumentParser(description="Train the lambdaSplit model.")
+    parser.add_argument(
+        "--no-log", "-n",
+        action="store_true",
+        help="Disable logging"
+    )
+    args = parser.parse_args()
+    train(root_dir=ROOT_DIR, data_dir=DATA_DIR, logging=not args.no_log)
