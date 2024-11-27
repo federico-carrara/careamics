@@ -111,7 +111,7 @@ def create_lambda_split_lightning_model(
     # Model config
     lvae_config = LVAEModel(
         architecture="LVAE",
-        algorithm_type="unsupervised",
+        training_mode="unsupervised",
         input_shape=img_size,
         multiscale_count=1,
         z_dims=[128, 128, 128, 128],
@@ -126,6 +126,7 @@ def create_lambda_split_lightning_model(
     
     # Loss config
     kl_loss_config = KLLossConfig(
+        loss_type="kl",
         rescaling="latent_dim",
         aggregation="mean",
         free_bits_coeff=0.0,
