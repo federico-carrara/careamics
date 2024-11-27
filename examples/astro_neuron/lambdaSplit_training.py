@@ -1,7 +1,6 @@
 import argparse
 import os
 import json
-import glob
 from pathlib import Path
 import socket
 from typing import Any, Literal, Optional, Sequence
@@ -30,7 +29,7 @@ from careamics.config.nm_model import GaussianMixtureNMConfig, MultiChannelNMCon
 from careamics.config.optimizer_models import LrSchedulerModel, OptimizerModel
 from careamics.lightning import VAEModule
 from careamics.dataset import InMemoryDataset
-from careamics.dataset.dataset_utils.readers.astro_neurons import get_fnames, get_train_test_fnames
+from careamics.dataset.dataset_utils.readers import load_astro_neuron_data
 from careamics.utils.io_utils import get_git_status, get_workdir
 
 
@@ -55,7 +54,7 @@ loss_type: Optional[Literal["musplit", "denoisplit", "denoisplit_musplit", "lamb
 """The type of reconstruction loss (i.e., likelihood) to use."""
 batch_size: int = 32
 """The batch size for training."""
-patch_size: list[int] = [64, 64]
+patch_size: list[int] = [8, 64, 64]
 """Spatial size of the input patches."""
 norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
 """Normalization strategy for the input data."""
@@ -65,7 +64,7 @@ lambda_params = ExtraLambdaParameters(
     dset_type="astrocytes",
     img_type="raw",
     groups=["control"],
-    dim="2D",
+    dim="3D",
 )
 
 # Training Parameters
@@ -113,6 +112,8 @@ def create_lambda_split_lightning_model(
         architecture="LVAE",
         training_mode="unsupervised",
         input_shape=img_size,
+        encoder_conv_strides=[1, 2, 2], # TODO: this chnages in 3D case
+        decoder_conv_strides=[1, 2, 2], # TODO: this changes in 3D case
         multiscale_count=1,
         z_dims=[128, 128, 128, 128],
         output_channels=len(spectral_metadata["fluorophores"]),
@@ -234,7 +235,7 @@ def train(
     )
     data_config = DataConfig(
         data_type="tiff",
-        axes="CYX",
+        axes="SCZYX", # TODO: this differs in 3D case
         patch_size=patch_size,
         batch_size=batch_size,
         transforms=[],
@@ -242,24 +243,31 @@ def train(
     )
     
     # Load data
-    fnames = get_fnames(
-        data_path=data_dir,
+    train_data = load_astro_neuron_data(
+        data_dir,
         dset_type=lambda_params.dset_type,
         img_type=lambda_params.img_type,
         groups=lambda_params.groups,
-        dim=lambda_params.dim
-    )
-    fnames = [Path(f) for f in fnames]
-    train_fnames, val_fnames = get_train_test_fnames(
-        fnames, test_percent=0.1, deterministic=True
+        dim=lambda_params.dim,
+        split="train",
+        only_first_n=2
     )
     train_dset = InMemoryDataset(
         data_config=data_config,
-        inputs=train_fnames,
+        inputs=train_data,
+    )
+    val_data = load_astro_neuron_data(
+        data_dir,
+        dset_type=lambda_params.dset_type,
+        img_type=lambda_params.img_type,
+        groups=lambda_params.groups,
+        dim=lambda_params.dim,
+        split="test",
+        only_first_n=1
     )
     val_dset = InMemoryDataset(
         data_config=data_config,
-        inputs=val_fnames,
+        inputs=val_data,
     )
 
     train_dloader = DataLoader(
