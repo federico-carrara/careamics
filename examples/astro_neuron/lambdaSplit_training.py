@@ -100,7 +100,7 @@ def unsupervised_collate_fn(batch: list[torch.Tensor, None]) -> torch.Tensor:
 def create_lambda_split_lightning_model(
     algorithm: str,
     loss_type: str,
-    img_size: int,
+    img_size: tuple[int, int],
     spectral_metadata: dict[str, Any],
     NM_paths: Optional[list[Path]] = None,
     training_config: TrainingConfig = TrainingConfig(),
@@ -280,11 +280,12 @@ def train(
     lightning_model = create_lambda_split_lightning_model(
         algorithm="lambdasplit",
         loss_type=loss_type,
-        img_size=patch_size[0],
+        img_size=patch_size,
         spectral_metadata=metadata,
         training_config=training_config,
     )
     
+    custom_logger = None
     if logging:
         # Define the logger
         custom_logger = WandbLogger(
@@ -308,13 +309,13 @@ def train(
         with open(os.path.join(workdir, "lambda_params.json"), "w") as f:
             f.write(lambda_params.model_dump_json(indent=4))
         
-    # Save Configs in WanDB
-    custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
-    custom_logger.experiment.config.update({"training": training_config.model_dump()})
-    custom_logger.experiment.config.update({"data": data_config.model_dump()})
-    custom_logger.experiment.config.update({"metadata": metadata})
-    custom_logger.experiment.config.update({"lambda_params": lambda_params.model_dump()})
-    
+        # Save Configs in WanDB
+        custom_logger.experiment.config.update({"algorithm": algo_config.model_dump()})
+        custom_logger.experiment.config.update({"training": training_config.model_dump()})
+        custom_logger.experiment.config.update({"data": data_config.model_dump()})
+        custom_logger.experiment.config.update({"metadata": metadata})
+        custom_logger.experiment.config.update({"lambda_params": lambda_params.model_dump()})
+        
     # Define callbacks (e.g., ModelCheckpoint, EarlyStopping, etc.)
     custom_callbacks = [
         EarlyStopping(
