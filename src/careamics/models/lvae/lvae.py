@@ -68,6 +68,7 @@ class LadderVAE(nn.Module):
 
     def __init__(
         self,
+        algorithm_type: Literal["supervised", "unsupervised"],
         input_shape: int,
         output_channels: int,
         multiscale_count: int,
@@ -99,10 +100,9 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Customizable attributes
+        self.algorithm_type = algorithm_type
         self.image_size = input_shape
         """Input image size. (Z, Y, X) or (Y, X) if the data is 2D."""
-        # TODO: we need to be careful with this since used to be an int.
-        # the tuple of shapes used to be `self.input_shape`.
         self.target_ch = output_channels
         self.encoder_conv_strides = encoder_conv_strides
         self.decoder_conv_strides = decoder_conv_strides
@@ -163,7 +163,6 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Data attributes
-        self.img_shape = (self.image_size, self.image_size)
         self.normalized_input = True
         # -------------------------------------------------------
 
@@ -284,14 +283,10 @@ class LadderVAE(nn.Module):
         # From what I got from Ashesh, Z should not be touched in any case.
         nonlin = get_activation(self.nonlin)
         conv_block = self.encoder_conv_op(
-            in_channels=self.color_ch,
+            in_channels=self.in_channels,
             out_channels=self.encoder_n_filters,
             kernel_size=self.encoder_res_block_kernel,
-            padding=(
-                0
-                if self.encoder_res_block_skip_padding
-                else self.encoder_res_block_kernel // 2
-            ),
+            padding=self.encoder_res_block_kernel // 2,
             stride=init_stride,
         )
 
@@ -817,8 +812,8 @@ class LadderVAE(nn.Module):
         """
         actual_downsampling = level_idx + 1
         dwnsc = 2**actual_downsampling
-        h = self.img_shape[0] // dwnsc
-        w = self.img_shape[1] // dwnsc
+        h = self.image_size[0] // dwnsc
+        w = self.image_size[1] // dwnsc
         assert h == w
         return h
 
