@@ -33,6 +33,8 @@ class LadderVAE(nn.Module):
 
     Parameters
     ----------
+    training_mode : Literal["supervised", "unsupervised"]
+        The training mode, either "supervised" or "unsupervised".
     input_shape : int
         The size of the input image.
     output_channels : int
@@ -68,7 +70,7 @@ class LadderVAE(nn.Module):
 
     def __init__(
         self,
-        algorithm_type: Literal["supervised", "unsupervised"],
+        training_mode: Literal["supervised", "unsupervised"],
         input_shape: int,
         output_channels: int,
         multiscale_count: int,
@@ -100,7 +102,7 @@ class LadderVAE(nn.Module):
 
         # -------------------------------------------------------
         # Customizable attributes
-        self.algorithm_type = algorithm_type
+        self.training_mode = training_mode
         self.image_size = input_shape
         """Input image size. (Z, Y, X) or (Y, X) if the data is 2D."""
         self.target_ch = output_channels

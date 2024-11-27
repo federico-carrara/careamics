@@ -362,7 +362,7 @@ class VAEModule(L.LightningModule):
             Loss value.
         """
         x, target = batch
-        if self.model.algorithm_type == "unsupervised":
+        if self.model.training_mode == "unsupervised":
             target = x
 
         # Forward pass
@@ -401,7 +401,7 @@ class VAEModule(L.LightningModule):
             Batch index.
         """
         x, target = batch
-        if self.model.algorithm_type == "unsupervised":
+        if self.model.training_mode == "unsupervised":
             target = x
 
         # Forward pass
@@ -420,14 +420,14 @@ class VAEModule(L.LightningModule):
         # Rename val_loss dict
         loss = {"_".join(["val", k]): v for k, v in loss.items()}
         self.log_dict(loss, on_epoch=True, prog_bar=True)
-        if self.model.algorithm_type == "supervised":
+        if self.model.training_mode == "supervised":
             curr_psnr = self.compute_val_psnr(out, target)
             for i, psnr in enumerate(curr_psnr):
                 self.log(f"val_psnr_ch{i+1}_batch", psnr, on_epoch=True)
 
     def on_validation_epoch_end(self) -> None:
         """Validation epoch end."""
-        if self.model.algorithm_type == "supervised":
+        if self.model.training_mode == "supervised":
             psnr_ = self.reduce_running_psnr()
             if psnr_ is not None:
                 self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)

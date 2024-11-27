@@ -573,6 +573,7 @@ def lambdasplit_loss(
         config.kl_params.current_epoch,
     )
     kl_loss = get_kl_divergence_loss(
+        kl_type=config.kl_params.loss_type,
         topdown_data=td_data, 
         rescaling=config.kl_params.rescaling,
         aggregation=config.kl_params.aggregation,
