@@ -1,14 +1,14 @@
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Sequence, Union
+from typing import Literal, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 import tifffile as tiff
 
-from careamics.file_io.read import read_czi
+from careamics.file_io.read.czi import _get_czi_shape, read_czi
 
 
 class GroupType(Enum):
@@ -126,24 +126,6 @@ def get_fnames(
     return fnames
 
 
-def _get_mid_slice(img: NDArray) -> NDArray:
-    """Get the middle Z-slice of a 3D stack.
-    
-    Parameters
-    ----------
-    img : NDArray
-        The 3D stack. Shape is (C, Z, Y, X).
-        
-    Returns
-    -------
-    NDArray
-        The middle Z-slice. Shape is (C, Y, X).
-    """
-    z_dim = img.shape[1]
-    mid_z = z_dim // 2
-    return img[:, mid_z, :, :]
-
-
 def get_train_test_fnames(
     fnames: list[str],
     test_percent: float = 0.1,
@@ -177,8 +159,61 @@ def get_train_test_fnames(
         train_idxs = np.random.choice(len(fnames), n_train, replace=False)
         test_idxs = np.setdiff1d(np.arange(len(fnames)), train_idxs)
         return [fnames[i] for i in train_idxs], [fnames[i] for i in test_idxs]
-        
+
+
+def _load_3D_data(fnames: list[str]) -> NDArray:
+    """Load 3D Z-stack images.
     
+    The problem here is that the images are not necessarily the same size along Z.
+    Hence, we first need to load all images to get the maximum Z size, and then pad.
+    
+    Parameters
+    ----------
+    fnames : list[str]
+        The list of filenames to load.
+        
+    Returns
+    -------
+    NDArray
+        The loaded data. Shape is (N, C, Z, Y, X).
+    """
+    # --- get the maximum Z size
+    max_z = np.max([_get_czi_shape(fname)[1] for fname in fnames])
+    
+    # --- load and pad images
+    data = []
+    for fname in tqdm(fnames, desc="Loading images"):
+        img = _load_img(fname)
+        z = img.shape[1]
+        pad = max_z - z
+        pad_up = pad // 2
+        pad_down = pad - pad_up
+        img = np.pad(
+            img, ((0, 0), (pad_down, pad_up), (0, 0), (0, 0)), mode="constant"
+        )
+        data.append(img)
+    return np.array(data)
+
+
+def _load_2D_data(fnames: list[str]) -> NDArray:
+    """Load 2D slice images.
+    
+    Parameters
+    ----------
+    fnames : list[str]
+        The list of filenames to load.
+        
+    Returns
+    -------
+    NDArray
+        The loaded data. Shape is (N, C, Y, X).
+    """
+    data = []
+    for fname in tqdm(fnames, desc="Loading images"):
+        img = _load_img(fname)
+        data.append(img)
+    return np.array(data)
+  
 
 def load_astro_neuron_data(
     data_path: Union[str, Path],
@@ -186,11 +221,12 @@ def load_astro_neuron_data(
     img_type: Literal["raw", "unmixed"], # TODO: change name
     groups: Sequence[Union[Literal["control", "arsenite", "tharps"], GroupType]],
     dim: Literal["2D", "3D"] = "2D",
+    split: Optional[Literal["train", "test"]] = None,
+    test_percent: float = 0.1,
+    deterministic_split: bool = True,
+    only_first_n: Optional[int] = None,
 ) -> NDArray:
     """Load data from neurons & astrocytes dataset.
-    
-    Data is naturally in the shape of multispectral 3D stacks, i.e., (C, Z, Y, X).
-    By setting `get_2D` to True, the function will return the middle Z-slice of stacks.
     
     Parameters
     ----------
@@ -204,6 +240,15 @@ def load_astro_neuron_data(
         The groups of samples to load.
     dim : Literal["2D", "3D"]
         Whether to load 3D Z-stacks or 2D slices.
+    split : Optional[Literal["train", "test"]]
+        Whether to load the training or testing set. If None all data are taken.
+        Default is None.
+    test_percent : float
+        The percentage of data to use for testing. Default is 0.1.
+    deterministic_split : bool
+        Whether to split train and test deterministically. Default is `True`.
+    only_first_n : Optional[int]
+        Load only the first `n` filenames. Default is None.
         
     Returns
     -------
@@ -219,10 +264,19 @@ def load_astro_neuron_data(
         img_type=img_type, 
         groups=groups
     )
-    print(f"Dataset: {dset_type} -- {img_type} -- {[g.name for g in groups]} -- {dim}")
+    if split is not None:
+        train_fnames, test_fnames = get_train_test_fnames(
+            fnames, test_percent=test_percent, deterministic=deterministic_split
+        )
+        fnames = train_fnames if split == "train" else test_fnames
+    fnames = fnames[:only_first_n] if only_first_n is not None else fnames
+    print(
+        f"Dataset: {dset_type} -- {img_type} -- {[g.name for g in groups]} -- {dim}"
+        f" -- {split}"
+    )
     print(f"Found {len(fnames)} images.")
-    data = []
-    for fname in tqdm(fnames, desc="Loading images"):
-        img = _load_img(fname)
-        data.append(img) # TODO: use generator for memory efficiency (yield)
-    return np.array(data)
+    if dim == "3D":
+        data = _load_3D_data(fnames)
+    else:
+        data = _load_2D_data(fnames)
+    return data
