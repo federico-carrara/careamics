@@ -47,16 +47,16 @@ class SpectralMixer(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            The unmixed images. Shape is (B, F, Y, X), where F is the number of
+            The unmixed images. Shape is (B, F, [Z], Y, X), where F is the number of
             fluorophores to unmix.
         
         Returns
         -------
         torch.Tensor
-            The mixed spectral image. Shape is (B, W, Y, X), where W is the number of
-            spectral channels.
+            The mixed spectral image. Shape is (B, W, [Z], Y, X), where W is the number
+            of spectral channels.
         """
-        B, F, H, W = x.shape 
-        return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, H, W)
+        B, F, *spatial = x.shape 
+        return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, *spatial)
     
 

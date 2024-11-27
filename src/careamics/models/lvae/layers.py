@@ -11,8 +11,6 @@ from typing import Callable, Literal, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import kl_divergence
-from torch.distributions.normal import Normal
 
 from .stochastic import NormalStochasticBlock
 from .utils import (
@@ -165,13 +163,6 @@ class ResidualBlock(nn.Module):
             modules.append(
                 GateLayer(
                     channels=channels,
-                    kernel_size=1, 
-                    nonlin=nonlin
-                )
-            )
-            modules.append(
-                GateLayer(
-                    channels=channels,
                     conv_strides=conv_strides,
                     kernel_size=1,
                     nonlin=nonlin,
@@ -197,10 +188,6 @@ class ResidualBlock(nn.Module):
         assert out.shape == x.shape, (
             f"output shape: {out.shape} != input shape: {x.shape}"
         )
-        return out + x
-        assert (
-            out.shape == x.shape
-        ), f"output shape: {out.shape} != input shape: {x.shape}"
         return out + x
 
 

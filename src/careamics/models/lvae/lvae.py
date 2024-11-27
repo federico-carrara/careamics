@@ -272,13 +272,13 @@ class LadderVAE(nn.Module):
         Method creates the first bottom-up block of the Encoder.
 
         Its role is to perform a first image compression step.
-        It is composed by a sequence of nn.Conv2d + non-linearity +
+        It is composed by a sequence of conv block + non-linearity +
         BottomUpDeterministicResBlock (1 or more, default is 1).
 
         Parameters
         ----------
         init_stride: int
-            The stride used by the intial Conv2d block.
+            The stride used by the intial conv block.
         num_res_blocks: int, optional
             The number of BottomUpDeterministicResBlocks, default is 1.
         """
@@ -484,7 +484,7 @@ class LadderVAE(nn.Module):
         namely to compress the lateral input image to a degree that is compatible with
         the one of the primary flow.
 
-        NOTE 1: Each input branch consists of a sequence of Conv2d + non-linearity
+        NOTE 1: Each input branch consists of a sequence of conv blocks + non-linearity
         + BottomUpDeterministicResBlock. It is meaningful to observe that the
         `BottomUpDeterministicResBlock` shares the same model attributes with the blocks
         in the primary flow of the Encoder (e.g., c_in, c_out, dropout, etc. etc.).
@@ -814,8 +814,8 @@ class LadderVAE(nn.Module):
         """
         actual_downsampling = level_idx + 1
         dwnsc = 2**actual_downsampling
-        h = self.image_size[0] // dwnsc
-        w = self.image_size[1] // dwnsc
+        h = self.image_size[-2] // dwnsc
+        w = self.image_size[-1] // dwnsc
         assert h == w
         return h
 
