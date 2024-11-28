@@ -30,7 +30,7 @@ from careamics.config.optimizer_models import LrSchedulerModel, OptimizerModel
 from careamics.lightning import VAEModule
 from careamics.dataset import InMemoryDataset
 from careamics.dataset.dataset_utils.readers.astro_neurons import (
-    get_fnames, get_train_test_fnames, get_max_z_size, load_3D_img
+    get_fnames, split_train_test_fnames, get_max_z_size, load_3D_img
 )
 from careamics.utils.io_utils import get_git_status, get_workdir
 
@@ -253,7 +253,7 @@ def train(
         dim=lambda_params.dim,
     )
     max_z = get_max_z_size(fnames)
-    train_fnames, val_fnames = get_train_test_fnames(
+    train_fnames, val_fnames = split_train_test_fnames(
         fnames, test_percent=0.1, deterministic=True
     )
     train_dset = InMemoryDataset(

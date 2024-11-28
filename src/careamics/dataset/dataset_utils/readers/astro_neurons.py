@@ -120,7 +120,7 @@ def get_fnames(
     return _sort_fnames(fnames)
 
 
-def get_train_test_fnames(
+def split_train_test_fnames(
     fnames: list[str],
     test_percent: float = 0.1,
     stratify: bool = False,
@@ -288,7 +288,7 @@ def load_astro_neuron_data(
         groups=groups
     )
     if split is not None:
-        train_fnames, test_fnames = get_train_test_fnames(
+        train_fnames, test_fnames = split_train_test_fnames(
             fnames, test_percent=test_percent, deterministic=deterministic_split
         )
         fnames = train_fnames if split == "train" else test_fnames
