@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal, Union
+from typing import Any, Callable, Literal, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -64,6 +64,7 @@ def prepare_patches_supervised(
     axes: str,
     patch_size: Union[list[int], tuple[int, ...]],
     read_source_func: Callable,
+    read_source_kwargs: dict[str, Any],
     norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """
@@ -83,6 +84,8 @@ def prepare_patches_supervised(
         Size of the patches.
     read_source_func : Callable
         Function to read the data.
+    read_source_kwargs : dict[str, Any]
+        Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
 
@@ -95,8 +98,8 @@ def prepare_patches_supervised(
     all_patches, all_targets = [], []
     for train_filename, target_filename in zip(train_files, target_files):
         try:
-            sample: np.ndarray = read_source_func(train_filename, axes)
-            target: np.ndarray = read_source_func(target_filename, axes)
+            sample: np.ndarray = read_source_func(train_filename, **read_source_kwargs)
+            target: np.ndarray = read_source_func(target_filename, **read_source_kwargs)
             means += sample.mean()
             stds += sample.std()
             num_samples += 1
@@ -155,6 +158,7 @@ def prepare_patches_unsupervised(
     axes: str,
     patch_size: Union[list[int], tuple[int]],
     read_source_func: Callable,
+    read_source_kwargs: dict[str, Any],
     norm_strategy: Literal["channel_wise", "global"]
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
@@ -171,6 +175,8 @@ def prepare_patches_unsupervised(
         Size of the patches.
     read_source_func : Callable
         Function to read the data.
+    read_source_kwargs : dict[str, Any]
+        Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
 
@@ -183,7 +189,7 @@ def prepare_patches_unsupervised(
     all_patches = []
     for filename in tqdm(train_files, desc="Reading files"):
         try:
-            sample: np.ndarray = read_source_func(filename, axes)
+            sample: np.ndarray = read_source_func(filename, **read_source_kwargs)
             means += sample.mean() # TODO: what do we need this for?
             stds += sample.std() # TODO: what do we need this for?
             num_samples += 1
