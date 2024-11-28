@@ -77,37 +77,6 @@ def _sort_fnames(fnames: list[str]) -> list[str]:
     return sorted(fnames, key=sorting_fn)
     
 
-def _load_img(fpath: Union[str, Path]) -> NDArray:
-    """Load an image from a file.
-    
-    It can load images from CZI or TIFF files.
-    
-    Parameters
-    ----------
-    fpath : Union[str, Path]
-        The path to the image file.
-    
-    Raises
-    ------
-    ValueError
-        If the file format is not supported. Sypported formats are CZI and TIFF.
-    
-    Returns
-    -------
-    NDArray
-        The loaded image.
-    """
-    if fpath.endswith(".czi"):
-        img = read_czi(fpath).squeeze()
-    elif fpath.endswith(".tif") or fpath.endswith(".tiff"):
-        img = tiff.imread(fpath)
-    else:
-        raise ValueError(
-            f"Unsupported file format: {fpath}. Supported formats are CZI and TIFF."
-        )
-    return img
-    
-
 def get_fnames(
     data_path: Union[str, Path],
     dset_type: Literal["astrocytes", "neurons"],
@@ -186,6 +155,43 @@ def get_train_test_fnames(
         return [fnames[i] for i in train_idxs], [fnames[i] for i in test_idxs]
 
 
+def get_max_z_size(fnames: list[str]) -> int:
+    """Get the maximum Z size of the images in `fnames`.
+    
+    Parameters
+    ----------
+    fnames : list[str]
+        The list of filenames to load.
+
+    Returns
+    -------
+    int
+        The maximum Z size.
+    """
+    return np.max([_get_czi_shape(fname)[1] for fname in fnames])
+
+
+def load_3D_img(fpath: Union[str, Path], max_z: int) -> NDArray:
+    """Load a 3D Z-stack image from a file and pad Z dimension.
+    
+    Parameters
+    ----------
+    fpath : Union[str, Path]
+        The path to the image file.
+    
+    Returns
+    -------
+    NDArray
+        The loaded image.
+    """
+    img = read_czi(fpath).squeeze()
+    z = img.shape[1]
+    pad = max_z - z
+    pad_up = pad // 2
+    pad_down = pad - pad_up
+    return np.pad(img, ((0, 0), (pad_down, pad_up), (0, 0), (0, 0)), mode="constant")
+
+
 def _load_3D_data(fnames: list[str]) -> NDArray:
     """Load 3D Z-stack images.
     
@@ -203,20 +209,12 @@ def _load_3D_data(fnames: list[str]) -> NDArray:
         The loaded data. Shape is (N, C, Z, Y, X).
     """
     # --- get the maximum Z size
-    max_z = np.max([_get_czi_shape(fname)[1] for fname in fnames])
+    max_z = get_max_z_size(fnames)
     
     # --- load and pad images
     data = []
     for fname in tqdm(fnames, desc="Loading images"):
-        img = _load_img(fname)
-        z = img.shape[1]
-        pad = max_z - z
-        pad_up = pad // 2
-        pad_down = pad - pad_up
-        img = np.pad(
-            img, ((0, 0), (pad_down, pad_up), (0, 0), (0, 0)), mode="constant"
-        )
-        data.append(img)
+        data.append(load_3D_img(fname, max_z))
     return np.array(data)
 
 
@@ -235,7 +233,7 @@ def _load_2D_data(fnames: list[str]) -> NDArray:
     """
     data = []
     for fname in tqdm(fnames, desc="Loading images"):
-        img = _load_img(fname)
+        img = tiff.imread(fname)
         data.append(img)
     return np.array(data)
   
@@ -249,7 +247,7 @@ def load_astro_neuron_data(
     split: Optional[Literal["train", "test"]] = None,
     test_percent: float = 0.1,
     deterministic_split: bool = True,
-    only_first_n: Optional[int] = None,
+    only_first_n: Optional[int] = None, # TODO: tmp, this won't work for multi groups
 ) -> NDArray:
     """Load data from neurons & astrocytes dataset.
     
