@@ -54,7 +54,7 @@ loss_type: Optional[Literal["musplit", "denoisplit", "denoisplit_musplit", "lamb
 """The type of reconstruction loss (i.e., likelihood) to use."""
 batch_size: int = 32
 """The batch size for training."""
-patch_size: list[int] = [8, 64, 64]
+patch_size: list[int] = [64, 64]
 """Spatial size of the input patches."""
 norm_strategy: Literal["channel-wise", "global"] = "channel-wise"
 """Normalization strategy for the input data."""
@@ -64,7 +64,7 @@ lambda_params = ExtraLambdaParameters(
     dset_type="astrocytes",
     img_type="raw",
     groups=["control"],
-    dim="3D",
+    dim="2D",
 )
 
 # Training Parameters
@@ -112,8 +112,8 @@ def create_lambda_split_lightning_model(
         architecture="LVAE",
         training_mode="unsupervised",
         input_shape=img_size,
-        encoder_conv_strides=[1, 2, 2], # TODO: this chnages in 3D case
-        decoder_conv_strides=[1, 2, 2], # TODO: this changes in 3D case
+        decoder_conv_strides=[2, 2], # TODO: this changes in 3D case
+        encoder_conv_strides=[2, 2], # TODO: this chnages in 3D case
         multiscale_count=1,
         z_dims=[128, 128, 128, 128],
         output_channels=len(spectral_metadata["fluorophores"]),
@@ -235,7 +235,7 @@ def train(
     )
     data_config = DataConfig(
         data_type="tiff",
-        axes="SCZYX", # TODO: this differs in 3D case
+        axes="SCYX", # TODO: this differs in 3D case
         patch_size=patch_size,
         batch_size=batch_size,
         transforms=[],
@@ -250,7 +250,6 @@ def train(
         groups=lambda_params.groups,
         dim=lambda_params.dim,
         split="train",
-        only_first_n=None
     )
     train_dset = InMemoryDataset(
         data_config=data_config,
@@ -266,7 +265,6 @@ def train(
         groups=lambda_params.groups,
         dim=lambda_params.dim,
         split="test",
-        only_first_n=None
     )
     val_dset = InMemoryDataset(
         data_config=data_config,
