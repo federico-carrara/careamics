@@ -50,6 +50,31 @@ def _str_to_group_type(
         ValueError(
             "Invalid group type. All entries must be str or `GroupType` instances."
         )
+        
+
+def _sort_fnames(fnames: list[str]) -> list[str]:
+    """Sort filenames to match 'raw' and 'unmixed' data in experiments.
+    
+    Sorting is done based on the ID of the experiment (e.g., VD-0428 < VD-0505)
+    and the number of replicate of an image (number in the filename).
+    
+    Parameters
+    ----------
+    x : str
+        The filename to sort.
+    """
+    def sorting_fn(x: str) -> int:
+        dirname = os.path.basename(os.path.dirname(x))
+        primary_key = int(dirname.split("_")[0][-3:])
+        fname = os.path.basename(x)
+        secondary_key = fname.split(".")[0].split("_")[3]
+        try: # astrocytes
+            secondary_key = int(secondary_key)
+        except ValueError: # neurons
+            secondary_key = int(secondary_key[-1])
+        return primary_key, secondary_key
+    
+    return sorted(fnames, key=sorting_fn)
     
 
 def _load_img(fpath: Union[str, Path]) -> NDArray:
@@ -108,7 +133,7 @@ def get_fnames(
     Returns
     -------
     list[str]
-        The list of filenames to load.
+        The list of filenames to load, sorted by exp ID and img ID.
     """
     fnames = []
     dim_dir = "Z-stacks" if dim == "3D" else "slices"
@@ -123,7 +148,7 @@ def get_fnames(
                 fnames += [
                     os.path.join(subdir_path, f) for f in allfiles if alias in f
                 ]
-    return fnames
+    return _sort_fnames(fnames)
 
 
 def get_train_test_fnames(
