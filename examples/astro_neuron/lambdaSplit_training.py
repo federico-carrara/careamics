@@ -250,12 +250,15 @@ def train(
         groups=lambda_params.groups,
         dim=lambda_params.dim,
         split="train",
-        only_first_n=2
+        only_first_n=None
     )
     train_dset = InMemoryDataset(
         data_config=data_config,
         inputs=train_data,
     )
+    del train_data
+    # TODO: loading data and creating dataset like this is not memory efficient
+    # we should pass the paths to the data and load them on the fly
     val_data = load_astro_neuron_data(
         data_dir,
         dset_type=lambda_params.dset_type,
@@ -263,12 +266,13 @@ def train(
         groups=lambda_params.groups,
         dim=lambda_params.dim,
         split="test",
-        only_first_n=1
+        only_first_n=None
     )
     val_dset = InMemoryDataset(
         data_config=data_config,
         inputs=val_data,
     )
+    del val_data
 
     train_dloader = DataLoader(
         train_dset,
