@@ -228,7 +228,7 @@ class FPRefMatrix(BaseModel):
         ]
 
     def _normalize(self, intensities: list[torch.Tensor]) -> list[torch.Tensor]:
-        """Normalize the intensities of the emission spectra in [0, 1].
+        """Normalize emission spectra intensity s.t. the integral sums up to 1.
         
         Parameters
         ----------
@@ -240,10 +240,8 @@ class FPRefMatrix(BaseModel):
         list[torch.Tensor]
             The normalized intensities.
         """
-        return [
-            (curr - curr.min()) / (curr.max() - curr.min())
-            for curr in intensities
-        ]
+        # TODO: also scale by QE and those things?
+        return [curr / curr.sum() for curr in intensities]
         
     def create(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
         """Create the reference matrix.
