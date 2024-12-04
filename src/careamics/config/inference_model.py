@@ -46,6 +46,10 @@ class InferenceConfig(BaseModel):
     batch_size: int = Field(default=1, ge=1)
     """Batch size for prediction."""
 
+    dataloader_params: Optional[dict] = Field(default=None, exclude=True)
+    """Dictionary of PyTorch dataloader parameters."""
+
+    
     @field_validator("tile_overlap")
     @classmethod
     def all_elements_non_zero_even(
