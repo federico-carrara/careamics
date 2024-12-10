@@ -148,7 +148,7 @@ class DataConfig(BaseModel):
     """List of transformations to apply to the data, available transforms are defined
     in SupportedTransform. The default values are set for Noise2Void."""
 
-    dataloader_params: Optional[dict] = None
+    dataloader_params: Optional[dict] = Field(default=None, exclude=True)
     """Dictionary of PyTorch dataloader parameters."""
 
     @field_validator("patch_size")

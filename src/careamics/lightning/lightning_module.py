@@ -14,6 +14,7 @@ from careamics.config.support import (
     SupportedOptimizer,
     SupportedScheduler,
 )
+from careamics.config.tile_information import TileInformation
 from careamics.losses import loss_factory
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
@@ -163,7 +164,17 @@ class FCNModule(L.LightningModule):
         Any
             Model output.
         """
-        if self._trainer.datamodule.tiled:
+        # TODO refactor when redoing datasets
+        # hacky way to determine if it is PredictDataModule, otherwise there is a
+        # circular import to solve with isinstance
+        from_prediction = hasattr(self._trainer.datamodule, "tiled")
+        is_tiled = (
+            len(batch) > 1
+            and isinstance(batch[1], list)
+            and isinstance(batch[1][0], TileInformation)
+        )
+
+        if is_tiled:
             x, *aux = batch
         else:
             x = batch
@@ -171,7 +182,10 @@ class FCNModule(L.LightningModule):
 
         # apply test-time augmentation if available
         # TODO: probably wont work with batch size > 1
-        if self._trainer.datamodule.prediction_config.tta_transforms:
+        if (
+            from_prediction
+            and self._trainer.datamodule.prediction_config.tta_transforms
+        ):
             tta = ImageRestorationTTA()
             augmented_batch = tta.forward(x)  # list of augmented tensors
             augmented_output = []
@@ -183,9 +197,18 @@ class FCNModule(L.LightningModule):
             output = self.model(x)
 
         # Denormalize the output
+        # TODO incompatible API between predict and train datasets
         denorm = Denormalize(
-            image_means=self._trainer.datamodule.predict_dataset.image_means,
-            image_stds=self._trainer.datamodule.predict_dataset.image_stds,
+            image_means=(
+                self._trainer.datamodule.predict_dataset.image_means
+                if from_prediction
+                else self._trainer.datamodule.train_dataset.image_stats.means
+            ),
+            image_stds=(
+                self._trainer.datamodule.predict_dataset.image_stds
+                if from_prediction
+                else self._trainer.datamodule.train_dataset.image_stats.stds
+            ),
         )
         denormalized_output = denorm(patch=output.cpu().numpy())
 
@@ -269,18 +292,21 @@ class VAEModule(L.LightningModule):
         self.model: nn.Module = model_factory(self.algorithm_config.model)
 
         # create loss function
-        self.noise_model: NoiseModel = noise_model_factory(
+        self.noise_model: Optional[NoiseModel] = noise_model_factory(
             self.algorithm_config.noise_model
         )
+
         self.noise_model_likelihood: Optional[NoiseModelLikelihood] = (
             likelihood_factory(
-                self.algorithm_config.noise_model_likelihood,
+                config=self.algorithm_config.noise_model_likelihood,
                 noise_model=self.noise_model,
             )
         )
+
         self.gaussian_likelihood: Optional[GaussianLikelihood] = likelihood_factory(
             self.algorithm_config.gaussian_likelihood
         )
+
         self.loss_parameters = self.algorithm_config.loss
         self.loss_func = loss_factory(self.algorithm_config.loss.loss_type)
 
@@ -336,7 +362,7 @@ class VAEModule(L.LightningModule):
             Loss value.
         """
         x, target = batch
-        if self.model.algorithm_type == "unsupervised":
+        if self.model.training_mode == "unsupervised":
             target = x
 
         # Forward pass
@@ -375,7 +401,7 @@ class VAEModule(L.LightningModule):
             Batch index.
         """
         x, target = batch
-        if self.model.algorithm_type == "unsupervised":
+        if self.model.training_mode == "unsupervised":
             target = x
 
         # Forward pass
@@ -394,14 +420,14 @@ class VAEModule(L.LightningModule):
         # Rename val_loss dict
         loss = {"_".join(["val", k]): v for k, v in loss.items()}
         self.log_dict(loss, on_epoch=True, prog_bar=True)
-        if self.model.algorithm_type == "supervised":
+        if self.model.training_mode == "supervised":
             curr_psnr = self.compute_val_psnr(out, target)
             for i, psnr in enumerate(curr_psnr):
                 self.log(f"val_psnr_ch{i+1}_batch", psnr, on_epoch=True)
 
     def on_validation_epoch_end(self) -> None:
         """Validation epoch end."""
-        if self.model.algorithm_type == "supervised":
+        if self.model.training_mode == "supervised":
             psnr_ = self.reduce_running_psnr()
             if psnr_ is not None:
                 self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)

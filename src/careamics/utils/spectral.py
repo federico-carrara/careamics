@@ -192,12 +192,21 @@ class FPRefMatrix(BaseModel):
     interval: Optional[Sequence[int]] = None
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
+    
+    def _sort_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
+        """Sort the fluorophore emission spectra by wavelength."""
+        def get_wavelength_at_peak_intensity(sp: Spectrum) -> float:
+            return sp.wavelength[sp.intensity.argmax()]
+        return sorted(fp_spectra, key=get_wavelength_at_peak_intensity)
 
     @cached_property
     def fp_spectra(self) -> list[Spectrum]:
         """Aligned fluorophore emission spectra."""
         # fetch emission spectra
         fp_sp = [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
+        
+        # sort spectra by wavelength
+        # fp_sp = self._sort_fp_spectra(fp_sp)
 
         # align spectra
         fp_sp0, *rest = fp_sp

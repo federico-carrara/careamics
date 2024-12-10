@@ -51,6 +51,7 @@ class InMemoryDataset(Dataset):
         inputs: Union[np.ndarray, list[Path]],
         input_target: Optional[Union[np.ndarray, list[Path]]] = None,
         read_source_func: Callable = read_tiff,
+        read_source_kwargs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -66,6 +67,8 @@ class InMemoryDataset(Dataset):
             Target data, by default None.
         read_source_func : Callable, optional
             Read source function for custom types, by default read_tiff.
+        read_source_kwargs : dict[str, Any], optional
+            Additional keyword arguments for the read source function, by default None.
         **kwargs : Any
             Additional keyword arguments, unused.
         """
@@ -78,6 +81,7 @@ class InMemoryDataset(Dataset):
 
         # read function
         self.read_source_func = read_source_func
+        self.read_source_kwargs = read_source_kwargs
 
         # generate patches
         supervised = self.input_targets is not None
@@ -166,6 +170,7 @@ class InMemoryDataset(Dataset):
                     self.patch_size,
                     self.norm_strategy,
                     self.read_source_func,
+                    self.read_source_kwargs,
                     self.norm_strategy,
                 )
             else:
@@ -188,6 +193,7 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.patch_size,
                     self.read_source_func,
+                    self.read_source_kwargs,
                     self.norm_strategy,
                 )
 

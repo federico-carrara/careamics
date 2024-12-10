@@ -95,21 +95,109 @@ def _reconstruction_loss_musplit_denoisplit(
     recons_loss_nm = get_reconstruction_loss(
         reconstruction=pred_mean, target=targets, likelihood_obj=nm_likelihood
     )
+
     recons_loss_gm = get_reconstruction_loss(
         reconstruction=predictions,
         target=targets,
         likelihood_obj=gaussian_likelihood,
     )
+
     recons_loss = nm_weight * recons_loss_nm + gaussian_weight * recons_loss_gm
     return recons_loss
 
 
 def get_kl_divergence_loss(
+    kl_type: Literal["kl", "kl_restricted"],
     topdown_data: dict[str, torch.Tensor],
     rescaling: Literal["latent_dim", "image_dim"],
     aggregation: Literal["mean", "sum"],
     free_bits_coeff: float,
     img_shape: Optional[tuple[int]] = None,
+) -> torch.Tensor:
+    """Compute the KL divergence loss.
+
+    NOTE: Description of `rescaling` methods:
+    - If "latent_dim", the KL-loss values are rescaled w.r.t. the latent space
+    dimensions (spatial + number of channels, i.e., (C, [Z], Y, X)). In this way they
+    have the same magnitude across layers.
+    - If "image_dim", the KL-loss values are rescaled w.r.t. the input image spatial
+    dimensions. In this way, the lower layers have a larger KL-loss value compared to
+    the higher layers, since the latent space and hence the KL tensor has more entries.
+    Specifically, at hierarchy `i`, the total KL loss is larger by a factor (128/i**2).
+
+    NOTE: the type of `aggregation` determines the magnitude of the KL-loss. Clearly,
+    "sum" aggregation results in a larger KL-loss value compared to "mean" by a factor
+    of `n_layers`.
+
+    NOTE: recall that sample-wise KL is obtained by summing over all dimensions,
+    including Z. Also recall that in current 3D implementation of LVAE, no downsampling
+    is done on Z. Therefore, to avoid emphasizing KL loss too much, we divide it
+    by the Z dimension of input image in every case.
+
+    Parameters
+    ----------
+    kl_type : Literal["kl", "kl_restricted"]
+        The type of KL divergence loss to compute.
+    topdown_data : dict[str, torch.Tensor]
+        A dictionary containing information computed for each layer during the top-down
+        pass. The dictionary must include the following keys:
+        - "kl": The KL-loss values for each layer. Shape of each tensor is (B,).
+        - "z": The sampled latents for each layer. Shape of each tensor is
+        (B, layers, `z_dims[i]`, H, W).
+    rescaling : Literal["latent_dim", "image_dim"]
+        The rescaling method used for the KL-loss values. If "latent_dim", the KL-loss
+        values are rescaled w.r.t. the latent space dimensions (spatial + number of
+        channels, i.e., (C, [Z], Y, X)). If "image_dim", the KL-loss values are
+        rescaled w.r.t. the input image spatial dimensions.
+    aggregation : Literal["mean", "sum"]
+        The aggregation method used to combine the KL-loss values across layers. If
+        "mean", the KL-loss values are averaged across layers. If "sum", the KL-loss
+        values are summed across layers.
+    free_bits_coeff : float
+        The free bits coefficient used for the KL-loss computation.
+    img_shape : Optional[tuple[int]]
+        The shape of the input image to the LVAE model. Shape is ([Z], Y, X).
+
+    Returns
+    -------
+    kl_loss : torch.Tensor
+        The KL divergence loss. Shape is (1, ).
+    """
+    kl = torch.cat(
+        [kl_layer.unsqueeze(1) for kl_layer in topdown_data[kl_type]],
+        dim=1,
+    )  # shape: (B, n_layers)
+
+    # Apply free bits (& batch average)
+    kl = free_bits_kl(kl, free_bits_coeff)  # shape: (n_layers,)
+
+    # In 3D case, rescale by Z dim
+    # TODO If we have downsampling in Z dimension, then this needs to change.
+    if len(img_shape) == 3:
+        kl = kl / img_shape[0]
+
+    # Rescaling
+    if rescaling == "latent_dim":
+        for i in range(len(kl)):
+            latent_dim = topdown_data["z"][i].shape[1:]
+            norm_factor = np.prod(latent_dim)
+            kl[i] = kl[i] / norm_factor
+    elif rescaling == "image_dim":
+        kl = kl / np.prod(img_shape[-2:])
+
+    # Aggregation
+    if aggregation == "mean":
+        kl = kl.mean()  # shape: (1,)
+    elif aggregation == "sum":
+        kl = kl.sum()  # shape: (1,)
+
+    return kl
+
+
+def _get_kl_divergence_loss_musplit(
+    topdown_data: dict[str, torch.Tensor],
+    img_shape: tuple[int],
+    kl_type: Literal["kl", "kl_restricted"],
 ) -> torch.Tensor:
     """Compute the KL divergence loss.
 
@@ -139,72 +227,10 @@ def get_kl_divergence_loss(
         - "kl": The KL-loss values for each layer. Shape of each tensor is (B,).
         - "z": The sampled latents for each layer. Shape of each tensor is
         (B, layers, `z_dims[i]`, H, W).
-    rescaling : Literal["latent_dim", "image_dim"]
-        The rescaling method used for the KL-loss values. If "latent_dim", the KL-loss
-        values are rescaled w.r.t. the latent space dimensions (spatial + number of
-        channels, i.e., (C, [Z], Y, X)). If "image_dim", the KL-loss values are
-        rescaled w.r.t. the input image spatial dimensions.
-    aggregation : Literal["mean", "sum"]
-        The aggregation method used to combine the KL-loss values across layers. If
-        "mean", the KL-loss values are averaged across layers. If "sum", the KL-loss
-        values are summed across layers.
-    free_bits_coeff : float
-        The free bits coefficient used for the KL-loss computation.
-    img_shape : Optional[tuple[int]]
-        The shape of the input image to the LVAE model. Shape is ([Z], Y, X).
-
-    Returns
-    -------
-    kl_loss : torch.Tensor
-        The KL divergence loss. Shape is (1, ).
-    """
-    kl = torch.cat(
-        [kl_layer.unsqueeze(1) for kl_layer in topdown_data["kl"]],
-        dim=1,
-    )  # shape: (B, n_layers)
-
-    # In 3D case, rescale by Z dim
-    # TODO If we have downsampling in Z dimension, then this needs to change.
-    if len(img_shape) == 3:
-        kl = kl / img_shape[0]
-
-    # Rescaling
-    if rescaling == "latent_dim":
-        for i in range(kl.shape[1]):
-            latent_dim = topdown_data["z"][i].shape[1:]
-            norm_factor = np.prod(latent_dim)
-            kl[:, i] = kl[:, i] / norm_factor
-    elif rescaling == "image_dim":
-        kl = kl / np.prod(img_shape[-2:])
-
-    # Apply free bits
-    kl_loss = free_bits_kl(kl, free_bits_coeff)  # shape: (n_layers,)
-
-    # Aggregation
-    if aggregation == "mean":
-        kl_loss = kl_loss.mean()  # shape: (1,)
-    elif aggregation == "sum":
-        kl_loss = kl_loss.sum()  # shape: (1,)
-
-    return kl_loss
-
-
-def _get_kl_divergence_loss_musplit(
-    topdown_data: dict[str, torch.Tensor],
-    img_shape: tuple[int],
-) -> torch.Tensor:
-    """Compute the KL divergence loss for muSplit.
-
-    Parameters
-    ----------
-    topdown_data : dict[str, torch.Tensor]
-        A dictionary containing information computed for each layer during the top-down
-        pass. The dictionary must include the following keys:
-        - "kl": The KL-loss values for each layer. Shape of each tensor is (B,).
-        - "z": The sampled latents for each layer. Shape of each tensor is
-        (B, layers, `z_dims[i]`, H, W).
     img_shape : tuple[int]
         The shape of the input image to the LVAE model. Shape is ([Z], Y, X).
+    kl_type : Literal["kl", "kl_restricted"]
+        The type of KL divergence loss to compute.
 
     Returns
     -------
@@ -212,6 +238,7 @@ def _get_kl_divergence_loss_musplit(
         The KL divergence loss for the muSplit case. Shape is (1, ).
     """
     return get_kl_divergence_loss(
+        kl_type="kl",  # TODO: hardcoded, deal in future PR
         topdown_data=topdown_data,
         rescaling="latent_dim",
         aggregation="mean",
@@ -223,6 +250,7 @@ def _get_kl_divergence_loss_musplit(
 def _get_kl_divergence_loss_denoisplit(
     topdown_data: dict[str, torch.Tensor],
     img_shape: tuple[int],
+    kl_type: Literal["kl", "kl_restricted"],
 ) -> torch.Tensor:
     """Compute the KL divergence loss for denoiSplit.
 
@@ -236,6 +264,8 @@ def _get_kl_divergence_loss_denoisplit(
         (B, layers, `z_dims[i]`, H, W).
     img_shape : tuple[int]
         The shape of the input image to the LVAE model. Shape is ([Z], Y, X).
+    kl_type : Literal["kl", "kl_restricted"]
+        The type of KL divergence loss to compute.
 
     Returns
     -------
@@ -243,6 +273,7 @@ def _get_kl_divergence_loss_denoisplit(
         The KL divergence loss for the denoiSplit case. Shape is (1, ).
     """
     return get_kl_divergence_loss(
+        kl_type=kl_type,
         topdown_data=topdown_data,
         rescaling="image_dim",
         aggregation="sum",
@@ -308,8 +339,13 @@ def musplit_loss(
         config.kl_weight,
         config.kl_params.current_epoch,
     )
-    kl_loss = kl_weight * _get_kl_divergence_loss_musplit(
-        topdown_data=td_data, img_shape=targets.shape[2:]
+    kl_loss = (
+        _get_kl_divergence_loss_musplit(
+            topdown_data=td_data,
+            img_shape=targets.shape[2:],
+            kl_type=config.kl_params.loss_type,
+        )
+        * kl_weight
     )
 
     net_loss = recons_loss + kl_loss
@@ -380,8 +416,13 @@ def denoisplit_loss(
         config.kl_weight,
         config.kl_params.current_epoch,
     )
-    kl_loss = kl_weight * _get_kl_divergence_loss_denoisplit(
-        topdown_data=td_data, img_shape=targets.shape[2:]
+    kl_loss = (
+        _get_kl_divergence_loss_denoisplit(
+            topdown_data=td_data,
+            img_shape=targets.shape[2:],
+            kl_type=config.kl_params.loss_type,
+        )
+        * kl_weight
     )
 
     net_loss = recons_loss + kl_loss
@@ -451,10 +492,12 @@ def denoisplit_musplit_loss(
     denoisplit_kl = _get_kl_divergence_loss_denoisplit(
         topdown_data=td_data,
         img_shape=targets.shape[2:],
+        kl_type=config.kl_params.loss_type,
     )
     musplit_kl = _get_kl_divergence_loss_musplit(
         topdown_data=td_data,
         img_shape=targets.shape[2:],
+        kl_type=config.kl_params.loss_type,
     )
     kl_loss = (
         config.denoisplit_weight * denoisplit_kl + config.musplit_weight * musplit_kl
@@ -530,6 +573,7 @@ def lambdasplit_loss(
         config.kl_params.current_epoch,
     )
     kl_loss = get_kl_divergence_loss(
+        kl_type=config.kl_params.loss_type,
         topdown_data=td_data, 
         rescaling=config.kl_params.rescaling,
         aggregation=config.kl_params.aggregation,
