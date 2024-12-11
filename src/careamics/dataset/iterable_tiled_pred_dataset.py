@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Optional
 
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset
@@ -51,6 +51,7 @@ class IterableTiledPredDataset(IterableDataset):
         prediction_config: InferenceConfig,
         src_files: list[Path],
         read_source_func: Callable = read_tiff,
+        read_source_kwargs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         """Constructor.
@@ -63,6 +64,8 @@ class IterableTiledPredDataset(IterableDataset):
             List of data files.
         read_source_func : Callable, optional
             Read source function for custom types, by default read_tiff.
+        read_source_kwargs : Dict[str, Any], optional
+            Additional keyword arguments for the read function, by default None.
         **kwargs : Any
             Additional keyword arguments, unused.
 
@@ -85,6 +88,7 @@ class IterableTiledPredDataset(IterableDataset):
         self.tile_size = prediction_config.tile_size
         self.tile_overlap = prediction_config.tile_overlap
         self.read_source_func = read_source_func
+        self.read_source_kwargs = read_source_kwargs
 
         # check mean and std and create normalize transform
         if (
@@ -125,6 +129,7 @@ class IterableTiledPredDataset(IterableDataset):
             self.prediction_config,
             self.data_files,
             read_source_func=self.read_source_func,
+            read_source_kwargs=self.read_source_kwargs,
         ):
             # generate patches, return a generator of single tiles
             patch_gen = extract_tiles(

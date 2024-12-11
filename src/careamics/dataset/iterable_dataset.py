@@ -5,9 +5,10 @@ from __future__ import annotations
 import copy
 from collections.abc import Generator
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import IterableDataset
 
 from careamics.config import DataConfig
@@ -53,6 +54,7 @@ class PathIterableDataset(IterableDataset):
         src_files: list[Path],
         target_files: Optional[list[Path]] = None,
         read_source_func: Callable = read_tiff,
+        read_source_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """Constructors.
 
@@ -71,6 +73,7 @@ class PathIterableDataset(IterableDataset):
         self.data_files = src_files
         self.target_files = target_files
         self.read_source_func = read_source_func
+        self.read_source_kwargs = read_source_kwargs
 
         # compute mean and std over the dataset
         # only checking the image_mean because the DataConfig class ensures that
@@ -132,10 +135,17 @@ class PathIterableDataset(IterableDataset):
         if self.target_files is not None:
             target_stats = WelfordStatistics()
 
-        for sample, target in iterate_over_files(
-            self.data_config, self.data_files, self.target_files, self.read_source_func
-        ):
-            # update the image statistics
+        for sample, target in tqdm(
+            iterate_over_files(
+                self.data_config, 
+                self.data_files, 
+                self.target_files, 
+                self.read_source_func,
+                self.read_source_kwargs
+            ),
+            desc="Calculating data stats",
+            total=len(self.data_files),
+        ):            
             image_stats.update(sample, num_samples)
 
             # update the target statistics if target is available
@@ -177,7 +187,11 @@ class PathIterableDataset(IterableDataset):
 
         # iterate over files
         for sample_input, sample_target in iterate_over_files(
-            self.data_config, self.data_files, self.target_files, self.read_source_func
+            self.data_config,
+            self.data_files,
+            self.target_files,
+            self.read_source_func,
+            self.read_source_kwargs
         ):
             patches = extract_patches_random(
                 arr=sample_input,

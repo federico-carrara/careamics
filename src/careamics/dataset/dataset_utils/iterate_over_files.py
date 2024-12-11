@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Generator, Optional, Union
+from typing import Any, Callable, Generator, Optional, Union
 
 from numpy.typing import NDArray
 from torch.utils.data import get_worker_info
@@ -22,6 +22,7 @@ def iterate_over_files(
     data_files: list[Path],
     target_files: Optional[list[Path]] = None,
     read_source_func: Callable = read_tiff,
+    read_source_kwargs: Optional[dict[str, Any]] = None,
 ) -> Generator[tuple[NDArray, Optional[NDArray]], None, None]:
     """Iterate over data source and yield whole reshaped images.
 
@@ -35,12 +36,17 @@ def iterate_over_files(
         List of target files, by default None.
     read_source_func : Callable, optional
         Function to read the source, by default read_tiff.
+    read_source_kwargs : dict, optional
+        Additional keyword arguments for the read function, by default None.
 
     Yields
     ------
     NDArray
         Image.
     """
+    if read_source_kwargs is None:
+        read_source_kwargs = {}
+    
     # When num_workers > 0, each worker process will have a different copy of the
     # dataset object
     # Configuring each copy independently to avoid having duplicate data returned
@@ -55,7 +61,7 @@ def iterate_over_files(
         if i % num_workers == worker_id:
             try:
                 # read data
-                sample = read_source_func(filename, data_config.axes)
+                sample = read_source_func(filename, **read_source_kwargs)
 
                 # reshape array
                 reshaped_sample = reshape_array(sample, data_config.axes)
@@ -70,7 +76,7 @@ def iterate_over_files(
                         )
 
                     # read target
-                    target = read_source_func(target_files[i], data_config.axes)
+                    target = read_source_func(target_files[i], **read_source_kwargs)
 
                     # reshape target
                     reshaped_target = reshape_array(target, data_config.axes)
