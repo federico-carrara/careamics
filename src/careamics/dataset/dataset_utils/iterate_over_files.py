@@ -44,6 +44,9 @@ def iterate_over_files(
     NDArray
         Image.
     """
+    if read_source_kwargs is None:
+        read_source_kwargs = {}
+    
     # When num_workers > 0, each worker process will have a different copy of the
     # dataset object
     # Configuring each copy independently to avoid having duplicate data returned
