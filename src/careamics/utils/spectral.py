@@ -24,6 +24,7 @@ class Spectrum(BaseModel):
 
     wavelength: torch.Tensor
     """The set of wavelength of the spectrum."""
+    
     intensity: torch.Tensor
     """The intensity of the spectrum."""
 
@@ -187,8 +188,10 @@ class FPRefMatrix(BaseModel):
 
     fp_names: Sequence[str]
     """The names of the fluorophores to include in the reference matrix."""
+    
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
+    
     interval: Optional[Sequence[int]] = None
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
@@ -206,7 +209,7 @@ class FPRefMatrix(BaseModel):
         fp_sp = [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
         
         # sort spectra by wavelength
-        # fp_sp = self._sort_fp_spectra(fp_sp)
+        fp_sp = self._sort_fp_spectra(fp_sp)
 
         # align spectra
         fp_sp0, *rest = fp_sp
