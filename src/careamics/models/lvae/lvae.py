@@ -61,6 +61,11 @@ class LadderVAE(nn.Module):
         Whether to predict the log variance.
     analytical_kl : bool
         Whether to use analytical KL divergence.
+    fluorophores : Sequence[str]
+        The names of the fluorophores in the image to unmix.
+    wv_range : Sequence[int]
+        The wavelength range of the spectral image.
+
 
     Raises
     ------
@@ -88,16 +93,7 @@ class LadderVAE(nn.Module):
         wv_range: Sequence[int],
         **kwargs,
     ):
-        """
-        Constructor.
-
-        Parameters
-        ----------
-        fluorophores : Sequence[str]
-            A sequence of the fluorophore names in the image to unmix.
-        wv_range : Sequence[int]
-            The wavelength range of the spectral image.
-        """
+        """Constructor."""
         super().__init__()
 
         # -------------------------------------------------------
@@ -126,6 +122,7 @@ class LadderVAE(nn.Module):
         self.wv_range = wv_range
         self.ref_learnable = kwargs.get("ref_learnable", False)
         self.in_channels = kwargs.get("num_bins", 1)
+        self.clip_unmixed = kwargs.get("clip_unmixed", False)
         # -------------------------------------------------------
         
 
@@ -251,12 +248,15 @@ class LadderVAE(nn.Module):
         )
         
         # Mixing layer to reconstruct spectrum
-        self.mixer = SpectralMixer(
-            flurophores=self.fluorophores,
-            wv_range=self.wv_range,
-            ref_learnable=self.ref_learnable,
-            num_bins=self.in_channels,
-        ) if self.fluorophores else nn.Identity() # TODO: ugly!!!
+        if self.training_mode == "unsupervised":
+            self.mixer = SpectralMixer(
+                flurophores=self.fluorophores,
+                wv_range=self.wv_range,
+                ref_learnable=self.ref_learnable,
+                num_bins=self.in_channels,
+            )
+        else:
+            self.mixer = nn.Identity()
         
         # msg =f'[{self.__class__.__name__}] Stoc:{not self.non_stochastic_version} RecMode:{self.reconstruction_mode} TethInput:{self._tethered_to_input}'
         # msg += f' TargetCh: {self.target_ch}'
@@ -771,7 +771,8 @@ class LadderVAE(nn.Module):
         out = self.output_layer(out)
         
         # Clip output to 0
-        out = torch.clamp(out, min=0.0)
+        if self.clip_unmixed:
+            out = torch.clamp(out, min=0.0)
         
         # Re-mixing
         remixed = self.mixer(out)
