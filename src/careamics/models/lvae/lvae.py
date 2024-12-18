@@ -242,7 +242,7 @@ class LadderVAE(nn.Module):
 
         # Output layer --> Project to target_ch many channels
         logvar_ch_needed = self.predict_logvar is not None
-        self.output_layer = self.parameter_net = self.decoder_conv_op(
+        self.output_layer = self.decoder_conv_op(
             self.decoder_n_filters,
             self.target_ch * (1 + logvar_ch_needed),
             kernel_size=3,
@@ -769,6 +769,9 @@ class LadderVAE(nn.Module):
         # Top-down inference/generation
         out, td_data = self.topdown_pass(bu_values)
         out = self.output_layer(out)
+        
+        # Clip output to 0
+        out = torch.clamp(out, min=0.0)
         
         # Re-mixing
         remixed = self.mixer(out)
