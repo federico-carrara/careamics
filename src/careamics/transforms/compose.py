@@ -8,6 +8,7 @@ from careamics.config.transformations import TransformModel
 
 from .n2v_manipulate import N2VManipulate
 from .normalize import Normalize
+from .synthetic_noise import SyntheticNoise
 from .transform import Transform
 from .xy_flip import XYFlip
 from .xy_random_rotate90 import XYRandomRotate90
@@ -17,6 +18,7 @@ ALL_TRANSFORMS = {
     "N2VManipulate": N2VManipulate,
     "XYFlip": XYFlip,
     "XYRandomRotate90": XYRandomRotate90,
+    "SyntheticNoise": SyntheticNoise,
 }
 
 

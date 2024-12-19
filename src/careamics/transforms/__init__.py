@@ -9,12 +9,14 @@ __all__ = [
     "Denormalize",
     "Normalize",
     "Compose",
+    "SyntheticNoise",
 ]
 
 
 from .compose import Compose, get_all_transforms
 from .n2v_manipulate import N2VManipulate
 from .normalize import Denormalize, Normalize
+from .synthetic_noise import SyntheticNoise
 from .tta import ImageRestorationTTA
 from .xy_flip import XYFlip
 from .xy_random_rotate90 import XYRandomRotate90
