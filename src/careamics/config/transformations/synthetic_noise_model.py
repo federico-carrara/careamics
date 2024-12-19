@@ -1,4 +1,4 @@
-from typing import Optional    
+from typing import Literal, Optional    
     
 from pydantic import ConfigDict, Field    
 
@@ -39,6 +39,8 @@ class SyntheticNoiseModel(TransformModel):
     model_config = ConfigDict(
         validate_assignment=True
     )
+    
+    name: Literal["SyntheticNoise"] = "SyntheticNoise"
     
     poisson_noise_factor: Optional[float] = Field(None, gt=0)
     """A multiplicative factor for the Poisson noise that determines the noise level.
