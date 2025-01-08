@@ -13,6 +13,7 @@ from torch.utils.data import IterableDataset
 
 from careamics.config import DataConfig
 from careamics.config.transformations import NormalizeModel
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -55,6 +56,7 @@ class PathIterableDataset(IterableDataset):
         target_files: Optional[list[Path]] = None,
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
     ) -> None:
         """Constructors.
 
@@ -74,6 +76,10 @@ class PathIterableDataset(IterableDataset):
         self.target_files = target_files
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        
+        # synthetic noise kwargs
+        self.gaussian_noise_factor = kwargs.get("gaussian_noise_factor", None)
+        self.poisson_noise_factor = kwargs.get("poisson_noise_factor", None)
 
         # compute mean and std over the dataset
         # only checking the image_mean because the DataConfig class ensures that
@@ -193,6 +199,13 @@ class PathIterableDataset(IterableDataset):
             self.read_source_func,
             self.read_source_kwargs
         ):
+            # add synthetic noise (if required)
+            synthetic_noise = SyntheticNoise(
+                self.poisson_noise_factor, 
+                self.gaussian_noise_factor * self.data_config.image_stds
+            )
+            sample_input, sample_target = synthetic_noise(sample_input, sample_target)
+            
             patches = extract_patches_random(
                 arr=sample_input,
                 patch_size=self.data_config.patch_size,
