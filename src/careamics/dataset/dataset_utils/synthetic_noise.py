@@ -10,7 +10,7 @@ class SyntheticNoise:
     The noise added to the image can be Gaussian (read-out noise) and/or
     Poisson (shot noise).
     
-    NOTE: Given \( F \) = `poisson_noise_factor`, for a pixel of intensity \( I \), the
+    Given \( F \) = `poisson_noise_factor`, for a pixel of intensity \( I \), the
     resulting pixel intensity with Poisson noise will have:
     
     .. math::
@@ -18,20 +18,22 @@ class SyntheticNoise:
         \sigma = noise = \sqrt{I / F}
 
     Hence, the Poisson noise increase with the inverse of the square root of F.
-    Namely, for F \in (0, 1), the resulting Poisson noise will be larger than in the original
-    pixel.
+    Namely, for F \in (0, 1), the resulting Poisson noise will be larger than in the
+    original  pixel.
     
+    Gaussian noise is simply drawn from a normal distribution with mean 0 and standard
+    deviation equal to the `gaussian_noise_factor` and added to the pixel intensity.
     
-    Parameters
+    Attributes
     ----------
     poisson_noise_factor : Optional[float]
-        A multiplicative factor for the Poisson noise that determines the noise level.
-        Specifically, Poisson noise is inversely proportional to the factor. Hence,
-        consider using a value in (0, 1) to increase the noise. 
+        A factor determining the magnitude of Poisson noise. Specifically, resulting
+        Poisson noise is inversely proportional to (the square root of) this factor.
+        Hence, consider using a value in (0, 1) to increase the noise. 
         If None, Poisson noise is disabled.
-    gaussian_scale : float
-        A multiplicative factor for the Gaussian noise. A sensible value is the standard
-        deviation of the input data or multiples of it.
+    gaussian_scale : Optional[float]
+        A factor determining the magnitude of Gaussian noise. A sensible value is the
+        standard deviation of the input data or multiples of it.
         If None, Gaussian noise is disabled.
     """
     
@@ -45,13 +47,13 @@ class SyntheticNoise:
         Parameters
         ----------
         poisson_noise_factor : Optional[float]
-            A multiplicative factor for the Poisson noise that determines the noise level.
-            Specifically, Poisson noise is inversely proportional to the factor. Hence,
-            consider using a value in (0, 1) to increase the noise. 
+            A factor determining the magnitude of Poisson noise. Specifically, resulting
+            Poisson noise is inversely proportional to (the square root of) this factor.
+            Hence, consider using a value in (0, 1) to increase the noise. 
             If None, Poisson noise is disabled.
-        gaussian_scale : float
-            A multiplicative factor for the Gaussian noise. A sensible value is the standard
-            deviation of the input data or multiples of it.
+        gaussian_scale : Optional[float]
+            A factor determining the magnitude of Gaussian noise. A sensible value is
+            the standard deviation of the input data or multiples of it.
             If None, Gaussian noise is disabled.
         """        
         self.poisson_noise_factor = poisson_noise_factor
