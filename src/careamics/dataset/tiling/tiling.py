@@ -57,14 +57,14 @@ def prepare_tiles(
             # reshape array
             sample = reshape_array(sample, axes)
 
-            # generate patches, return a generator
+            # generate tiles, return a generator
             tile_generator = extract_tiles(
                 arr=sample,
                 tile_size=tile_size,
                 overlaps=tile_overlap,
             )
 
-            # convert generator to list and add to all_patches
+            # convert generator to list and add tile_list
             tile_list.extend(list(tile_generator))
         except Exception as e:
             # emit warning and continue
