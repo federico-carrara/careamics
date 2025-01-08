@@ -8,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from ...utils.logging import get_logger
 from ..dataset_utils import reshape_array
 from ..dataset_utils.running_stats import compute_normalization_stats
@@ -65,7 +66,9 @@ def prepare_patches_supervised(
     patch_size: Union[list[int], tuple[int, ...]],
     read_source_func: Callable,
     read_source_kwargs: Optional[dict[str, Any]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    gaussian_noise_factor: Optional[float] = None,
+    poisson_noise_factor: Optional[float] = None
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches and corresponding targets.
@@ -88,6 +91,16 @@ def prepare_patches_supervised(
         Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    gaussian_noise_factor : Optional[float]
+        A factor determining the magnitude of Gaussian noise. Specifically, Gaussian
+        noise is drawn from `N(0, gaussian_noise_factor * data_std)`, where data_std is
+        the standard deviation of the input data. If None, Gaussian noise is disabled.
+        Default is None.
+    poisson_noise_factor : Optional[float]
+        A factor determining the magnitude of Poisson noise. Specifically, resulting
+        poisson noise will be proportional to `sqrt(I/poisson_noise_factor)`, where `I`
+        is the pixel-wise intensity of the input image. If None, Poisson noise is
+        disabled. Default is None.
 
     Returns
     -------
@@ -109,6 +122,12 @@ def prepare_patches_supervised(
             # reshape array
             sample = reshape_array(sample, axes)
             target = reshape_array(target, axes)
+            
+            # apply synthetic noise (if required)
+            synthetic_noise = SyntheticNoise(
+                poisson_noise_factor, gaussian_noise_factor * sample.std()
+            )
+            sample, target = synthetic_noise(sample, target)
 
             # generate patches, return a generator
             patches, targets = extract_patches_sequential(
@@ -161,7 +180,9 @@ def prepare_patches_unsupervised(
     patch_size: Union[list[int], tuple[int]],
     read_source_func: Callable,
     read_source_kwargs: Optional[dict[str, Any]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    gaussian_noise_factor: Optional[float] = None,
+    poisson_noise_factor: Optional[float] = None
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -181,6 +202,16 @@ def prepare_patches_unsupervised(
         Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    gaussian_noise_factor : Optional[float]
+        A factor determining the magnitude of Gaussian noise. Specifically, Gaussian
+        noise is drawn from `N(0, gaussian_noise_factor * data_std)`, where data_std is
+        the standard deviation of the input data. If None, Gaussian noise is disabled.
+        Default is None.
+    poisson_noise_factor : Optional[float]
+        A factor determining the magnitude of Poisson noise. Specifically, resulting
+        poisson noise will be proportional to `sqrt(I/poisson_noise_factor)`, where `I`
+        is the pixel-wise intensity of the input image. If None, Poisson noise is
+        disabled. Default is None.
 
     Returns
     -------
@@ -200,7 +231,13 @@ def prepare_patches_unsupervised(
 
             # reshape array
             sample = reshape_array(sample, axes)
-
+            
+            # apply synthetic noise (if required)
+            synthetic_noise = SyntheticNoise(
+                poisson_noise_factor, gaussian_noise_factor * sample.std()
+            )
+            sample = synthetic_noise(sample)
+            
             # generate patches, return a generator
             patches, _ = extract_patches_sequential(sample, patch_size=patch_size)
 
@@ -232,7 +269,9 @@ def prepare_patches_supervised_array(
     axes: str,
     data_target: NDArray,
     patch_size: Union[list[int], tuple[int]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    gaussian_noise_factor: Optional[float] = None,
+    poisson_noise_factor: Optional[float] = None
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -253,6 +292,16 @@ def prepare_patches_supervised_array(
         Size of the patches.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    gaussian_noise_factor : Optional[float]
+        A factor determining the magnitude of Gaussian noise. Specifically, Gaussian
+        noise is drawn from `N(0, gaussian_noise_factor * data_std)`, where data_std is
+        the standard deviation of the input data. If None, Gaussian noise is disabled.
+        Default is None.
+    poisson_noise_factor : Optional[float]
+        A factor determining the magnitude of Poisson noise. Specifically, resulting
+        poisson noise will be proportional to `sqrt(I/poisson_noise_factor)`, where `I`
+        is the pixel-wise intensity of the input image. If None, Poisson noise is
+        disabled. Default is None.
 
     Returns
     -------
@@ -269,6 +318,14 @@ def prepare_patches_supervised_array(
     )
     target_means, target_stds = compute_normalization_stats(
         reshaped_target, norm_strategy
+    )
+    
+    # apply synthetic noise (if required)
+    synthetic_noise = SyntheticNoise(
+        poisson_noise_factor, gaussian_noise_factor * image_stds
+    )
+    reshaped_sample, reshaped_target = synthetic_noise(
+        reshaped_sample, reshaped_target
     )
 
     # generate patches, return a generator
@@ -294,7 +351,9 @@ def prepare_patches_unsupervised_array(
     data: NDArray,
     axes: str,
     patch_size: Union[list[int], tuple[int]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    gaussian_noise_factor: Optional[float] = None,
+    poisson_noise_factor: Optional[float] = None
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches.
@@ -314,6 +373,17 @@ def prepare_patches_unsupervised_array(
         Size of the patches.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    gaussian_noise_factor : Optional[float]
+        A factor determining the magnitude of Gaussian noise. Specifically, Gaussian
+        noise is drawn from `N(0, gaussian_noise_factor * data_std)`, where data_std is
+        the standard deviation of the input data. If None, Gaussian noise is disabled.
+        Default is None.
+    poisson_noise_factor : Optional[float]
+        A factor determining the magnitude of Poisson noise. Specifically, resulting
+        poisson noise will be proportional to `sqrt(I/poisson_noise_factor)`, where `I`
+        is the pixel-wise intensity of the input image. If None, Poisson noise is
+        disabled. Default is None.
+    
 
     Returns
     -------
@@ -325,6 +395,12 @@ def prepare_patches_unsupervised_array(
 
     # calculate mean and std
     means, stds = compute_normalization_stats(reshaped_sample, norm_strategy)
+    
+    # apply synthetic noise (if required)
+    synthetic_noise = SyntheticNoise(
+        poisson_noise_factor, gaussian_noise_factor * stds
+    )
+    reshaped_sample = synthetic_noise(reshaped_sample)
 
     # generate patches, return a generator
     patches, _ = extract_patches_sequential(reshaped_sample, patch_size=patch_size)

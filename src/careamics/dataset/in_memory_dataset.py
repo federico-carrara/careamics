@@ -70,7 +70,7 @@ class InMemoryDataset(Dataset):
         read_source_kwargs : dict[str, Any], optional
             Additional keyword arguments for the read source function, by default None.
         **kwargs : Any
-            Additional keyword arguments, unused.
+            Additional keyword arguments, e.g., the ones related to synthetic noise.
         """
         self.data_config = data_config
         self.inputs = inputs
@@ -82,6 +82,10 @@ class InMemoryDataset(Dataset):
         # read function
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        
+        # synthetic noise kwargs
+        self.gaussian_noise_factor = kwargs.get("gaussian_noise_factor", None)
+        self.poisson_noise_factor = kwargs.get("poisson_noise_factor", None)
 
         # generate patches
         supervised = self.input_targets is not None
@@ -161,6 +165,8 @@ class InMemoryDataset(Dataset):
                     self.input_targets,
                     self.patch_size,
                     self.norm_strategy,
+                    self.gaussian_noise_factor,
+                    self.poisson_noise_factor,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
@@ -172,6 +178,8 @@ class InMemoryDataset(Dataset):
                     self.read_source_func,
                     self.read_source_kwargs,
                     self.norm_strategy,
+                    self.gaussian_noise_factor,
+                    self.poisson_noise_factor,
                 )
             else:
                 raise ValueError(
@@ -186,6 +194,8 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.patch_size,
                     self.norm_strategy,
+                    self.gaussian_noise_factor,
+                    self.poisson_noise_factor,
                 )
             else:
                 return prepare_patches_unsupervised(
@@ -195,6 +205,8 @@ class InMemoryDataset(Dataset):
                     self.read_source_func,
                     self.read_source_kwargs,
                     self.norm_strategy,
+                    self.gaussian_noise_factor,
+                    self.poisson_noise_factor,
                 )
 
     def __len__(self) -> int:
