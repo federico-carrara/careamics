@@ -1,10 +1,12 @@
 """In-memory prediction dataset."""
 
 from __future__ import annotations
+from typing import Any, Callable, Optional
 
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
+from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
 from ..config import InferenceConfig
@@ -27,6 +29,8 @@ class InMemoryPredDataset(Dataset):
         self,
         prediction_config: InferenceConfig,
         inputs: NDArray,
+        read_source_func: Callable = read_tiff,
+        read_source_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """Constructor.
 
@@ -43,10 +47,14 @@ class InMemoryPredDataset(Dataset):
             If data_path is not a directory.
         """
         self.pred_config = prediction_config
-        self.input_array = inputs
+        self.inputs = inputs
         self.axes = self.pred_config.axes
         self.image_means = self.pred_config.image_means
         self.image_stds = self.pred_config.image_stds
+        
+        # read function
+        self.read_source_func = read_source_func
+        self.read_source_kwargs = read_source_kwargs
 
         # Reshape data
         self.data = reshape_array(self.input_array, self.axes)
