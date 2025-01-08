@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Callable, Optional
 
+import numpy as np
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
@@ -88,7 +89,7 @@ class InMemoryTiledPredDataset(Dataset):
         list[tuple[NDArray, TileInformation]]
             List of tiles and tile information.
         """
-        if isinstance(self.inputs, NDArray):
+        if isinstance(self.inputs, np.ndarray):
             # get tiles from the input array
             patches_list = prepare_tiles_array(
                 data=self.inputs,
@@ -99,12 +100,12 @@ class InMemoryTiledPredDataset(Dataset):
         else:
             # read the input data & then get tiles
             patches_list = prepare_tiles(
-                data=self.inputs,
+                fpaths=self.inputs,
                 axes=self.axes,
                 tile_size=self.tile_size,
                 tile_overlap=self.tile_overlap,
-                read_func=self.read_source_func,
-                read_kwargs=self.read_source_kwargs,
+                read_source_func=self.read_source_func,
+                read_source_kwargs=self.read_source_kwargs,
             )
 
         if len(patches_list) == 0:

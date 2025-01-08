@@ -3,7 +3,6 @@ from numpy.typing import NDArray
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-import numpy as np
 from tqdm import tqdm
 
 from careamics.config.tile_information import TileInformation
