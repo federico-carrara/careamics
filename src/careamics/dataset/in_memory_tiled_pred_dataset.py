@@ -1,17 +1,18 @@
 """In-memory tiled prediction dataset."""
 
 from __future__ import annotations
+from typing import Any, Callable, Optional
 
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
+from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
 from ..config import InferenceConfig
 from ..config.tile_information import TileInformation
 from ..config.transformations import NormalizeModel
-from .dataset_utils import reshape_array
-from .tiling import extract_tiles
+from .tiling import prepare_tiles, prepare_tiles_array
 
 
 class InMemoryTiledPredDataset(Dataset):
@@ -28,7 +29,9 @@ class InMemoryTiledPredDataset(Dataset):
     def __init__(
         self,
         prediction_config: InferenceConfig,
-        inputs: NDArray, # TODO: add option to load from file
+        inputs: NDArray,
+        read_source_func: Callable = read_tiff,
+        read_source_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """Constructor.
 
@@ -54,12 +57,16 @@ class InMemoryTiledPredDataset(Dataset):
             )
 
         self.pred_config = prediction_config
-        self.input_array = inputs
+        self.inputs = inputs
         self.axes = self.pred_config.axes
         self.tile_size = prediction_config.tile_size
         self.tile_overlap = prediction_config.tile_overlap
         self.image_means = self.pred_config.image_means
         self.image_stds = self.pred_config.image_stds
+        
+        # read function
+        self.read_source_func = read_source_func
+        self.read_source_kwargs = read_source_kwargs
 
         # Generate patches
         # TODO: this is just unsupervised, need to add targets
@@ -78,19 +85,27 @@ class InMemoryTiledPredDataset(Dataset):
 
         Returns
         -------
-        list of tuples of NDArray and TileInformation
+        list[tuple[NDArray, TileInformation]]
             List of tiles and tile information.
         """
-        # reshape array
-        reshaped_sample = reshape_array(self.input_array, self.axes)
-
-        # generate patches, which returns a generator
-        patch_generator = extract_tiles(
-            arr=reshaped_sample,
-            tile_size=self.tile_size,
-            overlaps=self.tile_overlap,
-        )
-        patches_list = list(patch_generator)
+        if isinstance(self.inputs, NDArray):
+            # get tiles from the input array
+            patches_list = prepare_tiles_array(
+                data=self.inputs,
+                axes=self.axes,
+                tile_size=self.tile_size,
+                tile_overlap=self.tile_overlap,
+            )
+        else:
+            # read the input data & then get tiles
+            patches_list = prepare_tiles(
+                data=self.inputs,
+                axes=self.axes,
+                tile_size=self.tile_size,
+                tile_overlap=self.tile_overlap,
+                read_func=self.read_source_func,
+                read_kwargs=self.read_source_kwargs,
+            )
 
         if len(patches_list) == 0:
             raise ValueError("No tiles generated, ")
