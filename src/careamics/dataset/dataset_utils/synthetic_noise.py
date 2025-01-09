@@ -87,6 +87,8 @@ class SyntheticNoise:
         NDArray
             The transformed array.
         """
+        assert len(arr.shape) == len(axes), "Incompatible array shape and axes."
+        
         # --- apply Poisson noise
         if self.poisson_noise_factor:
             out_dtype = arr.dtype
