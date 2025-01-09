@@ -62,42 +62,9 @@ class SyntheticNoise:
         """        
         self.poisson_noise_factor = poisson_noise_factor
         self.gaussian_noise_factor = gaussian_noise_factor
-        
+
     
-    def __call__(
-        self,
-        inp_arr: NDArray,
-        scale: Sequence[float],
-        tar_arr: Optional[NDArray] = None,
-    ) -> tuple[NDArray, Optional[NDArray]]:
-        """Apply the transform.
-        
-        Parameters
-        ----------
-        inp_arr : NDArray
-            The input array to apply synthetic noise to. Shape is (S, C, Z, Y, X).
-        scale : Sequence[float]
-            The scale values peculiar of the input data. Specifically, the standard
-            deviation of the Gaussian noise is determined by multiplying the scale
-            value by the `gaussian_noise_factor`. The code assumes a scale value for
-            each channel.
-        tar_arr : Optional[NDArray], optional
-            The target array to apply synthetic noise to. Shape is (S, C, Z, Y, X).
-        
-        Returns
-        -------
-        tuple[NDArray, Optional[NDArray]]
-            The transformed input and target (if provided) arrays.
-        """
-        inp_arr = self._apply(inp_arr, scale)
-        
-        if tar_arr is not None:
-            tar_arr = self._apply(tar_arr, scale)
-        
-        return inp_arr, tar_arr
-    
-    
-    def _apply(self, arr: NDArray, scale: Sequence[float]) -> NDArray:
+    def __call__(self, arr: NDArray, scale: Sequence[float]) -> NDArray:
         """Apply the transform.
         
         NOTE: Poisson sampling requires the input to be positive. Hence, the method

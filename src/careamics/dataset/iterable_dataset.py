@@ -201,10 +201,16 @@ class PathIterableDataset(IterableDataset):
         ):
             # add synthetic noise (if required)
             synthetic_noise = SyntheticNoise(
-                self.poisson_noise_factor, 
-                self.gaussian_noise_factor * self.data_config.image_stds
+                self.poisson_noise_factor, self.gaussian_noise_factor
             )
-            sample_input, sample_target = synthetic_noise(sample_input, sample_target)
+            sample_input = synthetic_noise(
+                inp_arr=sample_input,
+                scale=self.data_config.image_stds
+            )
+            sample_target = synthetic_noise( 
+                tar_arr=sample_target,
+                scale=self.data_config.image_stds
+            )
             
             patches = extract_patches_random(
                 arr=sample_input,
