@@ -235,7 +235,7 @@ def prepare_patches_unsupervised(
             
             # apply synthetic noise (if required)
             synthetic_noise = SyntheticNoise(poisson_noise_factor, gaussian_noise_factor)
-            sample = synthetic_noise(inp_arr=sample, axes=axes)
+            sample = synthetic_noise(sample, axes=axes)
             
             # generate patches, return a generator
             patches, _ = extract_patches_sequential(sample, patch_size=patch_size)
