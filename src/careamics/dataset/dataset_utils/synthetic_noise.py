@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 from numpy import ndarray as NDArray
@@ -31,9 +31,11 @@ class SyntheticNoise:
         Poisson noise is inversely proportional to (the square root of) this factor.
         Hence, consider using a value in (0, 1) to increase the noise. 
         If None, Poisson noise is disabled.
-    gaussian_scale : Optional[float]
-        A factor determining the magnitude of Gaussian noise. A sensible value is the
-        standard deviation of the input data or multiples of it.
+    gaussian_noise_factor : Optional[float]
+        A multiplicative factor determining the magnitude of Gaussian noise.
+        Specifically, it is used to multiply a scale value peculiar of the data
+        synthetic noise is applied to (e.g., their standard deviation). 
+        In this way, the noise is drawn from `N(0, gaussian_noise_factor * scale)`.
         If None, Gaussian noise is disabled.
     """
     
@@ -51,9 +53,11 @@ class SyntheticNoise:
             Poisson noise is inversely proportional to (the square root of) this factor.
             Hence, consider using a value in (0, 1) to increase the noise. 
             If None, Poisson noise is disabled.
-        gaussian_scale : Optional[float]
-            A factor determining the magnitude of Gaussian noise. A sensible value is
-            the standard deviation of the input data or multiples of it.
+        gaussian_noise_factor : Optional[float]
+            A multiplicative factor determining the magnitude of Gaussian noise.
+            Specifically, it is used to multiply a scale value peculiar of the data
+            synthetic noise is applied to (e.g., their standard deviation). 
+            In this way, the noise is drawn from `N(0, gaussian_noise_factor * scale)`.
             If None, Gaussian noise is disabled.
         """        
         self.poisson_noise_factor = poisson_noise_factor
@@ -63,6 +67,7 @@ class SyntheticNoise:
     def __call__(
         self,
         inp_arr: NDArray,
+        scale: Sequence[float],
         tar_arr: Optional[NDArray] = None,
     ) -> tuple[NDArray, Optional[NDArray]]:
         """Apply the transform.
@@ -70,24 +75,29 @@ class SyntheticNoise:
         Parameters
         ----------
         inp_arr : NDArray
-            The input array to apply synthetic noise to.
+            The input array to apply synthetic noise to. Shape is (S, C, Z, Y, X).
+        scale : Sequence[float]
+            The scale values peculiar of the input data. Specifically, the standard
+            deviation of the Gaussian noise is determined by multiplying the scale
+            value by the `gaussian_noise_factor`. The code assumes a scale value for
+            each channel.
         tar_arr : Optional[NDArray], optional
-            The target array to apply synthetic noise to.
+            The target array to apply synthetic noise to. Shape is (S, C, Z, Y, X).
         
         Returns
         -------
         tuple[NDArray, Optional[NDArray]]
             The transformed input and target (if provided) arrays.
         """
-        inp_arr = self._apply(inp_arr)
+        inp_arr = self._apply(inp_arr, scale)
         
         if tar_arr is not None:
-            tar_arr = self._apply(tar_arr)
+            tar_arr = self._apply(tar_arr, scale)
         
         return inp_arr, tar_arr
     
     
-    def _apply(self, arr: NDArray) -> NDArray:
+    def _apply(self, arr: NDArray, scale: Sequence[float]) -> NDArray:
         """Apply the transform.
         
         NOTE: Poisson sampling requires the input to be positive. Hence, the method
@@ -96,7 +106,12 @@ class SyntheticNoise:
         Parameters
         ----------
         arr : NDArray
-            The array to apply synthetic noise to.
+            The array to apply synthetic noise to. Shape is (S, C, Z, Y, X).
+        scale : Sequence[float]
+            The scale values peculiar of the input data. Specifically, the standard
+            deviation of the Gaussian noise is determined by multiplying the scale
+            value by the `gaussian_noise_factor`. The code assumes a scale value for
+            each channel.
         
         Returns
         -------
@@ -111,6 +126,9 @@ class SyntheticNoise:
         
         # --- apply Gaussian noise
         if self.gaussian_noise_factor:
-            arr += np.random.normal(0, self.gaussian_noise_factor, arr.shape)
+            # reshape scale to match `arr` dimensions
+            scale = np.asarray(scale) * self.gaussian_noise_factor
+            scale = scale.reshape(1, -1, *(1,) * (arr.ndim - 2))
+            arr += np.random.normal(0, scale, arr.shape)
         
         return arr
