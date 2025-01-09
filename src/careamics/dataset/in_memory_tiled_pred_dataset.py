@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -25,6 +26,12 @@ class InMemoryTiledPredDataset(Dataset):
         Prediction configuration.
     inputs : NDArray
         Input data.
+    read_source_func : Callable, optional
+        Read source function for custom types, by default read_tiff.
+    read_source_kwargs : dict[str, Any], optional
+        Additional keyword arguments for the read source function, by default None.
+    synthetic_noise : SyntheticNoise, optional
+        Synthetic noise object to apply to the data, by default None.
     """
 
     def __init__(
@@ -33,6 +40,7 @@ class InMemoryTiledPredDataset(Dataset):
         inputs: NDArray,
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
+        synthetic_noise: Optional[SyntheticNoise] = None,
     ) -> None:
         """Constructor.
 
@@ -42,6 +50,12 @@ class InMemoryTiledPredDataset(Dataset):
             Prediction configuration.
         inputs : NDArray
             Input data.
+        read_source_func : Callable, optional
+            Read source function for custom types, by default read_tiff.
+        read_source_kwargs : dict[str, Any], optional
+            Additional keyword arguments for the read source function, by default None.
+        synthetic_noise : SyntheticNoise, optional
+            Synthetic noise object to apply to the data, by default None.
 
         Raises
         ------
@@ -68,6 +82,9 @@ class InMemoryTiledPredDataset(Dataset):
         # read function
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        
+        # synthetic noise
+        self.synthetic_noise = synthetic_noise
 
         # Generate patches
         # TODO: this is just unsupervised, need to add targets
