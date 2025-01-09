@@ -75,6 +75,8 @@ class InMemoryDataset(Dataset):
             Read source function for custom types, by default read_tiff.
         read_source_kwargs : dict[str, Any], optional
             Additional keyword arguments for the read source function, by default None.
+        synthetic_noise : SyntheticNoise, optional
+            Synthetic noise object to apply to the data, by default None.
         **kwargs : Any
             Additional keyword arguments, e.g., the ones related to synthetic noise.
         """
@@ -89,7 +91,7 @@ class InMemoryDataset(Dataset):
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
         
-        # synthetic noise kwargs
+        # synthetic noise
         self.synthetic_noise = synthetic_noise
 
         # generate patches
