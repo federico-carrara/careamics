@@ -89,14 +89,12 @@ class SyntheticNoise:
         """
         # --- apply Poisson noise
         if self.poisson_noise_factor:
-            out_dtype = arr.dtype
             arr = np.random.poisson(arr * self.poisson_noise_factor) / self.poisson_noise_factor
-            arr = arr.astype(out_dtype) # as Poisson noise is integer-valued
         
         # --- apply Gaussian noise
         if self.gaussian_noise_factor:
             # compute scale as array std
-            ax_ids = [i for i, ax in enumerate(axes) if ax != "C"]
+            ax_ids = tuple([i for i, ax in enumerate(axes) if ax != "C"])
             scale = np.std(arr, axis=ax_ids, keepdims=True) * self.gaussian_noise_factor
             # add Gaussian noise
             arr += np.random.normal(0, scale, arr.shape)
