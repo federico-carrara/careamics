@@ -64,7 +64,7 @@ class SyntheticNoise:
         self.gaussian_noise_factor = gaussian_noise_factor
 
     
-    def __call__(self, arr: NDArray, scale: Sequence[float], axes: str) -> NDArray:
+    def __call__(self, arr: NDArray, axes: str) -> NDArray:
         """Apply the transform.
         
         NOTE: Poisson sampling requires the input to be positive. Hence, the method
@@ -87,8 +87,6 @@ class SyntheticNoise:
         NDArray
             The transformed array.
         """
-        assert len(arr.shape) == len(axes), "Incompatible array shape and axes."
-        
         # --- apply Poisson noise
         if self.poisson_noise_factor:
             out_dtype = arr.dtype
@@ -97,10 +95,9 @@ class SyntheticNoise:
         
         # --- apply Gaussian noise
         if self.gaussian_noise_factor:
-            # reshape scale to match `arr` dimensions
-            scale = np.asarray(scale) * self.gaussian_noise_factor
-            new_shape = [-1 if ax == "C" else 1 for ax in axes]
-            scale = scale.reshape(*new_shape)
+            # compute scale as array std
+            ax_ids = [i for i, ax in enumerate(axes) if ax != "C"]
+            scale = np.std(arr, axis=ax_ids, keepdims=True) * self.gaussian_noise_factor
             # add Gaussian noise
             arr += np.random.normal(0, scale, arr.shape)
         
