@@ -205,11 +205,13 @@ class PathIterableDataset(IterableDataset):
             )
             sample_input = synthetic_noise(
                 inp_arr=sample_input,
-                scale=self.data_config.image_stds
+                scale=self.data_config.image_stds,
+                axes=self.data_config.axes,
             )
             sample_target = synthetic_noise( 
                 tar_arr=sample_target,
-                scale=self.data_config.image_stds
+                scale=self.data_config.image_stds,
+                axes=self.data_config.axes,
             )
             
             patches = extract_patches_random(

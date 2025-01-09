@@ -128,10 +128,10 @@ def prepare_patches_supervised(
                 poisson_noise_factor, gaussian_noise_factor
             )
             sample = synthetic_noise(
-                sample, sample.std(axis=np.arange(1, sample.ndim))
+                sample, sample.std(axis=np.arange(1, sample.ndim)), axes=axes
             )
             target = synthetic_noise(
-                target, target.std(axis=np.arange(1, target.ndim))
+                target, target.std(axis=np.arange(1, target.ndim)), axes=axes
             )
 
             # generate patches, return a generator
@@ -241,7 +241,8 @@ def prepare_patches_unsupervised(
             synthetic_noise = SyntheticNoise(poisson_noise_factor, gaussian_noise_factor)
             sample = synthetic_noise(
                 inp_arr=sample, 
-                scale=sample.std(axis=np.arange(1, sample.ndim))
+                scale=sample.std(axis=np.arange(1, sample.ndim)),
+                axes=axes
             )
             
             # generate patches, return a generator
@@ -330,8 +331,8 @@ def prepare_patches_supervised_array(
     synthetic_noise = SyntheticNoise(
         poisson_noise_factor, gaussian_noise_factor
     )
-    reshaped_sample = synthetic_noise(reshaped_sample, image_stds)
-    reshaped_target = synthetic_noise(reshaped_target, target_stds)
+    reshaped_sample = synthetic_noise(reshaped_sample, image_stds, axes)
+    reshaped_target = synthetic_noise(reshaped_target, target_stds, axes)
 
     # generate patches, return a generator
     patches, patch_targets = extract_patches_sequential(
@@ -403,7 +404,7 @@ def prepare_patches_unsupervised_array(
     
     # apply synthetic noise (if required)
     synthetic_noise = SyntheticNoise(poisson_noise_factor, gaussian_noise_factor)
-    reshaped_sample = synthetic_noise(reshaped_sample, stds)
+    reshaped_sample = synthetic_noise(reshaped_sample, stds, axes)
 
     # generate patches, return a generator
     patches, _ = extract_patches_sequential(reshaped_sample, patch_size=patch_size)

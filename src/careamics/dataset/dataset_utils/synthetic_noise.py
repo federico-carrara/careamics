@@ -64,7 +64,7 @@ class SyntheticNoise:
         self.gaussian_noise_factor = gaussian_noise_factor
 
     
-    def __call__(self, arr: NDArray, scale: Sequence[float]) -> NDArray:
+    def __call__(self, arr: NDArray, scale: Sequence[float], axes: str) -> NDArray:
         """Apply the transform.
         
         NOTE: Poisson sampling requires the input to be positive. Hence, the method
@@ -79,6 +79,8 @@ class SyntheticNoise:
             deviation of the Gaussian noise is determined by multiplying the scale
             value by the `gaussian_noise_factor`. The code assumes a scale value for
             each channel.
+        axes : str
+            Description of the axes in the input array (e.g., a subset of `STCZYX`).
         
         Returns
         -------
@@ -95,7 +97,9 @@ class SyntheticNoise:
         if self.gaussian_noise_factor:
             # reshape scale to match `arr` dimensions
             scale = np.asarray(scale) * self.gaussian_noise_factor
-            scale = scale.reshape(1, -1, *(1,) * (arr.ndim - 2))
+            new_shape = [-1 if ax == "C" else 1 for ax in axes]
+            scale = scale.reshape(*new_shape)
+            # add Gaussian noise
             arr += np.random.normal(0, scale, arr.shape)
         
         return arr
