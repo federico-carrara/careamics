@@ -40,6 +40,10 @@ class PathIterableDataset(IterableDataset):
         Optional list of target files, by default None.
     read_source_func : Callable, optional
         Read source function for custom types, by default read_tiff.
+    read_source_kwargs : dict[str, Any], optional
+        Additional keyword arguments for the read function, by default None.
+    synthetic_noise : SyntheticNoise, optional
+        Synthetic noise object to apply to data, by default None.
 
     Attributes
     ----------
@@ -56,7 +60,7 @@ class PathIterableDataset(IterableDataset):
         target_files: Optional[list[Path]] = None,
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
-        **kwargs,
+        synthetic_noise: Optional[SyntheticNoise] = None,
     ) -> None:
         """Constructors.
 
@@ -70,16 +74,17 @@ class PathIterableDataset(IterableDataset):
             Optional list of target files, by default None.
         read_source_func : Callable, optional
             Read source function for custom types, by default read_tiff.
+        read_source_kwargs : dict[str, Any], optional
+            Additional keyword arguments for the read function, by default None.
+        synthetic_noise : SyntheticNoise, optional
+            Synthetic noise object to apply to data, by default None.
         """
         self.data_config = data_config
         self.data_files = src_files
         self.target_files = target_files
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
-        
-        # synthetic noise kwargs
-        self.gaussian_noise_factor = kwargs.get("gaussian_noise_factor", None)
-        self.poisson_noise_factor = kwargs.get("poisson_noise_factor", None)
+        self.synthetic_noise = synthetic_noise
 
         # compute mean and std over the dataset
         # only checking the image_mean because the DataConfig class ensures that
@@ -147,7 +152,8 @@ class PathIterableDataset(IterableDataset):
                 self.data_files, 
                 self.target_files, 
                 self.read_source_func,
-                self.read_source_kwargs
+                self.read_source_kwargs,
+                self.synthetic_noise,
             ),
             desc="Calculating data stats",
             total=len(self.data_files),
@@ -197,15 +203,9 @@ class PathIterableDataset(IterableDataset):
             self.data_files,
             self.target_files,
             self.read_source_func,
-            self.read_source_kwargs
-        ):
-            # add synthetic noise (if required)
-            synthetic_noise = SyntheticNoise(
-                self.poisson_noise_factor, self.gaussian_noise_factor
-            )
-            sample_input = synthetic_noise(sample_input, axes=self.data_config.axes)
-            sample_target = synthetic_noise(sample_target, axes=self.data_config.axes)
-            
+            self.read_source_kwargs,
+            self.synthetic_noise,
+        ):  
             patches = extract_patches_random(
                 arr=sample_input,
                 patch_size=self.data_config.patch_size,

@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from torch.utils.data import get_worker_info
 
 from careamics.config import DataConfig, InferenceConfig
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.utils.logging import get_logger
 
@@ -23,6 +24,7 @@ def iterate_over_files(
     target_files: Optional[list[Path]] = None,
     read_source_func: Callable = read_tiff,
     read_source_kwargs: Optional[dict[str, Any]] = None,
+    synthetic_noise: Optional[SyntheticNoise] = None,
 ) -> Generator[tuple[NDArray, Optional[NDArray]], None, None]:
     """Iterate over data source and yield whole reshaped images.
 
@@ -38,6 +40,8 @@ def iterate_over_files(
         Function to read the source, by default read_tiff.
     read_source_kwargs : dict, optional
         Additional keyword arguments for the read function, by default None.
+    synthetic_noise : SyntheticNoise, optional
+        Synthetic noise object to add to the data, by default None.
 
     Yields
     ------
@@ -62,7 +66,11 @@ def iterate_over_files(
             try:
                 # read data
                 sample = read_source_func(filename, **read_source_kwargs)
-
+                
+                # add synthetic noise (if required)
+                if synthetic_noise is not None:
+                    sample = synthetic_noise(sample, axes=data_config.axes)
+                
                 # reshape array
                 reshaped_sample = reshape_array(sample, data_config.axes)
 
