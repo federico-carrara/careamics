@@ -97,6 +97,6 @@ class SyntheticNoise:
             ax_ids = tuple([i for i, ax in enumerate(axes) if ax != "C"])
             scale = np.std(arr, axis=ax_ids, keepdims=True) * self.gaussian_noise_factor
             # add Gaussian noise
-            arr += np.random.normal(0, scale, arr.shape)
+            arr = arr + np.random.normal(0, scale, arr.shape)
         
         return arr
