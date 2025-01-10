@@ -13,6 +13,7 @@ from torch.utils.data import IterableDataset
 
 from careamics.config import DataConfig
 from careamics.config.transformations import NormalizeModel
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -39,6 +40,10 @@ class PathIterableDataset(IterableDataset):
         Optional list of target files, by default None.
     read_source_func : Callable, optional
         Read source function for custom types, by default read_tiff.
+    read_source_kwargs : dict[str, Any], optional
+        Additional keyword arguments for the read function, by default None.
+    synthetic_noise : SyntheticNoise, optional
+        Synthetic noise object to apply to data, by default None.
 
     Attributes
     ----------
@@ -55,6 +60,7 @@ class PathIterableDataset(IterableDataset):
         target_files: Optional[list[Path]] = None,
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
+        synthetic_noise: Optional[SyntheticNoise] = None,
     ) -> None:
         """Constructors.
 
@@ -68,12 +74,17 @@ class PathIterableDataset(IterableDataset):
             Optional list of target files, by default None.
         read_source_func : Callable, optional
             Read source function for custom types, by default read_tiff.
+        read_source_kwargs : dict[str, Any], optional
+            Additional keyword arguments for the read function, by default None.
+        synthetic_noise : SyntheticNoise, optional
+            Synthetic noise object to apply to data, by default None.
         """
         self.data_config = data_config
         self.data_files = src_files
         self.target_files = target_files
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        self.synthetic_noise = synthetic_noise
 
         # compute mean and std over the dataset
         # only checking the image_mean because the DataConfig class ensures that
@@ -141,7 +152,8 @@ class PathIterableDataset(IterableDataset):
                 self.data_files, 
                 self.target_files, 
                 self.read_source_func,
-                self.read_source_kwargs
+                self.read_source_kwargs,
+                self.synthetic_noise,
             ),
             desc="Calculating data stats",
             total=len(self.data_files),
@@ -191,8 +203,9 @@ class PathIterableDataset(IterableDataset):
             self.data_files,
             self.target_files,
             self.read_source_func,
-            self.read_source_kwargs
-        ):
+            self.read_source_kwargs,
+            self.synthetic_noise,
+        ):  
             patches = extract_patches_random(
                 arr=sample_input,
                 patch_size=self.data_config.patch_size,

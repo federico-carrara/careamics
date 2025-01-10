@@ -8,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
+from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from ...utils.logging import get_logger
 from ..dataset_utils import reshape_array
 from ..dataset_utils.running_stats import compute_normalization_stats
@@ -65,7 +66,8 @@ def prepare_patches_supervised(
     patch_size: Union[list[int], tuple[int, ...]],
     read_source_func: Callable,
     read_source_kwargs: Optional[dict[str, Any]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    synthetic_noise: Optional[SyntheticNoise] = None
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches and corresponding targets.
@@ -88,6 +90,8 @@ def prepare_patches_supervised(
         Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    synthetic_noise : Optional[SyntheticNoise]
+        Synthetic noise object to add to the data, by default None.
 
     Returns
     -------
@@ -105,6 +109,11 @@ def prepare_patches_supervised(
             means += sample.mean()
             stds += sample.std()
             num_samples += 1
+            
+            # apply synthetic noise (if required)
+            if synthetic_noise is not None:
+                sample = synthetic_noise(sample, axes=axes)
+                target = synthetic_noise(target, axes=axes)
 
             # reshape array
             sample = reshape_array(sample, axes)
@@ -161,7 +170,8 @@ def prepare_patches_unsupervised(
     patch_size: Union[list[int], tuple[int]],
     read_source_func: Callable,
     read_source_kwargs: Optional[dict[str, Any]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    synthetic_noise: Optional[SyntheticNoise] = None
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -181,6 +191,8 @@ def prepare_patches_unsupervised(
         Keyword arguments to pass to the read_source_func.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    synthetic_noise : Optional[SyntheticNoise]
+        Synthetic noise object to add to the data, by default None.
 
     Returns
     -------
@@ -197,10 +209,14 @@ def prepare_patches_unsupervised(
             means += sample.mean() # TODO: what do we need this for?
             stds += sample.std() # TODO: what do we need this for?
             num_samples += 1
+            
+            # apply synthetic noise (if required)
+            if synthetic_noise is not None:
+                sample = synthetic_noise(sample, axes=axes)
 
             # reshape array
             sample = reshape_array(sample, axes)
-
+            
             # generate patches, return a generator
             patches, _ = extract_patches_sequential(sample, patch_size=patch_size)
 
@@ -232,7 +248,8 @@ def prepare_patches_supervised_array(
     axes: str,
     data_target: NDArray,
     patch_size: Union[list[int], tuple[int]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    synthetic_noise: Optional[SyntheticNoise] = None
 ) -> PatchedOutput:
     """Iterate over data source and create an array of patches.
 
@@ -253,12 +270,19 @@ def prepare_patches_supervised_array(
         Size of the patches.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    synthetic_noise : Optional[SyntheticNoise]
+        Synthetic noise object to add to the data, by default None.
 
     Returns
     -------
     PatchedOutput
         Dataclass holding the source and target patches, with their statistics.
     """
+    # apply synthetic noise (if required)
+    if synthetic_noise is not None:
+        reshaped_sample = synthetic_noise(reshaped_sample, axes=axes)
+        reshaped_target = synthetic_noise(reshaped_target, axes=axes)
+    
     # reshape array
     reshaped_sample = reshape_array(data, axes)
     reshaped_target = reshape_array(data_target, axes)
@@ -294,7 +318,8 @@ def prepare_patches_unsupervised_array(
     data: NDArray,
     axes: str,
     patch_size: Union[list[int], tuple[int]],
-    norm_strategy: Literal["channel_wise", "global"]
+    norm_strategy: Literal["channel_wise", "global"],
+    synthetic_noise: Optional[SyntheticNoise] = None
 ) -> PatchedOutput:
     """
     Iterate over data source and create an array of patches.
@@ -314,12 +339,19 @@ def prepare_patches_unsupervised_array(
         Size of the patches.
     norm_strategy : Literal["channel_wise", "global"]
         Normalization strategy.
+    synthetic_noise : Optional[SyntheticNoise]
+        Synthetic noise object to add to the data, by default None.
+    
 
     Returns
     -------
     PatchedOutput
         Dataclass holding the patches and their statistics.
     """
+    # apply synthetic noise (if required)
+    if synthetic_noise is not None:
+        reshaped_sample = synthetic_noise(reshaped_sample, axes=axes)
+    
     # reshape array
     reshaped_sample = reshape_array(data, axes)
 
