@@ -1,7 +1,7 @@
 """Tiled patching utilities."""
 
 import itertools
-from typing import Generator, List, Tuple, Union
+from typing import Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -83,6 +83,7 @@ def extract_tiles(
     arr: np.ndarray,
     tile_size: Union[List[int], Tuple[int, ...]],
     overlaps: Union[List[int], Tuple[int, ...]],
+    sample_id: Optional[int] = None,
 ) -> Generator[Tuple[np.ndarray, TileInformation], None, None]:
     """Generate tiles from the input array with specified overlap.
 
