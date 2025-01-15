@@ -48,13 +48,16 @@ def stitch_prediction(
     # slice the lists and apply stitch_prediction_single to each in turn.
     for image_slice in image_slices:
         image_predictions.append(
-            stitch_prediction_single(tiles[image_slice], tile_infos[image_slice])
+            stitch_prediction_single(
+                np.asarray(tiles[image_slice]), 
+                tile_infos[image_slice]
+            )
         )
     return image_predictions
 
 
 def stitch_prediction_single(
-    tiles: List[NDArray],
+    tiles: NDArray,
     tile_infos: List[TileInformation],
 ) -> NDArray:
     """
@@ -65,9 +68,9 @@ def stitch_prediction_single(
 
     Parameters
     ----------
-    tiles : list of numpy.ndarray
-        Cropped tiles and their respective stitching coordinates.
-    tile_infos : list of TileInformation
+    tiles : NDArray
+        Cropped tiles.
+    tile_infos : list[TileInformation]
         List of information and coordinates obtained from
         `dataset.tiled_patching.extract_tiles`.
 
@@ -113,7 +116,7 @@ def stitch_prediction_single(
 
 
 def stitch_predictions_non_ordered(
-    tiles: List[np.ndarray],
+    tiles: Union[NDArray, list[NDArray]],
     tile_infos: List[TileInformation],
 ) -> list[np.ndarray]:
     """Stitch predictions for non-ordered tiles.
@@ -125,9 +128,9 @@ def stitch_predictions_non_ordered(
     
     Parameters
     ----------
-    tiles : list of np.ndarray
-        List of tiles. Can contain tiles from multiple images mixed together.
-    tile_infos : list of TileInformation
+    tiles : Union[np.ndarray, list[np.ndarray]]
+        Array or list of tiles. Can contain tiles from multiple images mixed together.
+    tile_infos : list[TileInformation]
         List of tile information objects.
     
     Returns
