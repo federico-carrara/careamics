@@ -35,8 +35,12 @@ class TileInformation(BaseModel):
     stitch_coords: tuple[tuple[int, ...], ...]
     """Coordinates in the original image where to stitch the cropped tile back."""
 
-    sample_id: int
-    """Sample ID of the tile."""
+    sample_id: str
+    """Sample ID of the tile. 
+    It is a string of form 'xxx-xxx'. The first 3 characters are related to the id of
+    the file, whereas the trailing 3 characters are related to the id of the sample
+    within the file (if it is more than one). If either of the ids are not specified,
+    the hash corresponding string is '???'."""
 
     # TODO: Test that ZYX axes are not singleton ?
 

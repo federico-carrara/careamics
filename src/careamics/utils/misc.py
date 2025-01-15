@@ -39,15 +39,15 @@ def int_to_3chars(number: Optional[int]) -> str:
     # If the string is longer than 3 characters, truncate it
     return hash_string[-3:]
 
-def get_sample_id(file_id: int, sample_id: Optional[int]) -> str:
+def get_sample_id(file_id: Optional[int], sample_id: Optional[int]) -> str:
     """Get the sample ID from the file and sample IDs.
 
     Parameters
     ----------
-    file_id : int
-        The ID of the file.
-    sample_id : int
-        The ID of the sample.
+    file_id : Optional[int]
+        The ID of the file, if available.
+    sample_id : Optional[int]
+        The ID of the sample, if available.
 
     Returns
     -------
