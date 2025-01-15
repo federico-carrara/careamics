@@ -144,7 +144,7 @@ class IterableTiledPredDataset(IterableDataset):
                 arr=sample,
                 tile_size=self.tile_size,
                 overlaps=self.tile_overlap,
-                sample_id=sample_id,
+                file_id=sample_id,
             )
 
             # apply transform to patches

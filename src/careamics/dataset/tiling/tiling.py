@@ -69,7 +69,7 @@ def prepare_tiles(
                 arr=sample,
                 tile_size=tile_size,
                 overlaps=tile_overlap,
-                sample_id=num_samples,
+                file_id=num_samples,
             )
 
             # convert generator to list and add tile_list
