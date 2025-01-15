@@ -110,3 +110,33 @@ def stitch_prediction_single(
         predicted_image[image_slices] = cropped_tile.astype(np.float32)
 
     return predicted_image
+
+
+def stitch_predictions_non_ordered(
+    tiles: List[np.ndarray],
+    tile_infos: List[TileInformation],
+) -> list[np.ndarray]:
+    """Stitch predictions for non-ordered tiles.
+    
+    This can be the case when dataloaders do not return tiles in the same order as the
+    original image. Therefore, tiles of different images are mixed together.
+    In this function, we use the `sample_id` of the TileInformation to sort the tiles
+    before stitching them back together.
+    
+    Parameters
+    ----------
+    tiles : list of np.ndarray
+        List of tiles. Can contain tiles from multiple images mixed together.
+    tile_infos : list of TileInformation
+        List of tile information objects.
+    
+    Returns
+    -------
+    list of np.ndarray
+        List of full images.
+    """
+    # Sort tiles and tile_infos based on sample_id
+    sorted_tiles, sorted_tile_infos = zip(
+        *sorted(zip(tiles, tile_infos), key=lambda x: x[1].sample_id)
+    )
+    return stitch_prediction(sorted_tiles, sorted_tile_infos)                                                                    
