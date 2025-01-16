@@ -6,22 +6,22 @@ def int_to_3chars(number: Optional[int]) -> str:
 
     Parameters
     ----------
-    number : int
+    number : Optional[int]
         The input integer.
 
     Returns
     -------
     str
-        A 3-character string derived from the integer.
+        A 3-character string derived from the integer, "zzz" if number is None.
     """
     if number is None:
-        return "???"
+        return "zzz"
     
     if number < 0:
         raise ValueError("Only non-negative integers are supported.")
 
     # Define the alphabet for the hash (base-62: 0-9, A-Z, a-z)
-    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy"
     base = len(alphabet)
 
     # Convert number to the given base

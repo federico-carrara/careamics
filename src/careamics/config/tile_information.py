@@ -40,7 +40,7 @@ class TileInformation(BaseModel):
     It is a string of form 'xxx-xxx'. The first 3 characters are related to the id of
     the file, whereas the trailing 3 characters are related to the id of the sample
     within the file (if it is more than one). If either of the ids are not specified,
-    the hash corresponding string is '???'."""
+    the hash corresponding string is 'zzz'."""
 
     # TODO: Test that ZYX axes are not singleton ?
 
