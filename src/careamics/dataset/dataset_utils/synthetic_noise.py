@@ -87,16 +87,19 @@ class SyntheticNoise:
         NDArray
             The transformed array.
         """
+        # --- compute std before adding noise
+        if self.gaussian_noise_factor:
+            ax_ids = tuple([i for i, ax in enumerate(axes) if ax != "C"])
+            std = np.std(arr, axis=ax_ids, keepdims=True)
+        
         # --- apply Poisson noise
         if self.poisson_noise_factor:
             arr = np.random.poisson(arr * self.poisson_noise_factor) / self.poisson_noise_factor
         
         # --- apply Gaussian noise
         if self.gaussian_noise_factor:
-            # compute scale as array std
-            ax_ids = tuple([i for i, ax in enumerate(axes) if ax != "C"])
-            scale = np.std(arr, axis=ax_ids, keepdims=True) * self.gaussian_noise_factor
             # add Gaussian noise
+            scale = std * self.gaussian_noise_factor
             arr = arr + np.random.normal(0, scale, arr.shape)
         
         return arr
