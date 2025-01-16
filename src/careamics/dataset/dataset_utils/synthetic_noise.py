@@ -62,6 +62,26 @@ class SyntheticNoise:
         """        
         self.poisson_noise_factor = poisson_noise_factor
         self.gaussian_noise_factor = gaussian_noise_factor
+        
+    
+    def _rescale(self, arr: NDArray, axes: str) -> NDArray:
+        """Rescale the array to `np.uint16` range and dtype.
+        
+        Parameters
+        ----------
+        arr : NDArray
+            The array to rescale. Shape is (S, C, Z, Y, X).
+        axes : str
+            Description of the axes in the input array (e.g., a subset of `STCZYX`).
+        
+        Returns
+        -------
+        
+        """
+        ax_idxs = tuple([i for i, ax in enumerate(axes) if ax != "C"])
+        min_ = arr.min(axis=ax_idxs, keepdims=True)
+        max_ = arr.max(axis=ax_idxs, keepdims=True)
+        return ((arr - min_) / (max_ - min_) * (2**16 - 1)).astype(np.uint16)
 
     
     def __call__(self, arr: NDArray, axes: str) -> NDArray:
@@ -87,16 +107,23 @@ class SyntheticNoise:
         NDArray
             The transformed array.
         """
+        # --- compute std before adding noise
+        if self.gaussian_noise_factor:
+            ax_idxs = tuple([i for i, ax in enumerate(axes) if ax != "C"])
+            std = np.std(arr, axis=ax_idxs, keepdims=True)
+        
         # --- apply Poisson noise
         if self.poisson_noise_factor:
             arr = np.random.poisson(arr * self.poisson_noise_factor) / self.poisson_noise_factor
         
         # --- apply Gaussian noise
         if self.gaussian_noise_factor:
-            # compute scale as array std
-            ax_ids = tuple([i for i, ax in enumerate(axes) if ax != "C"])
-            scale = np.std(arr, axis=ax_ids, keepdims=True) * self.gaussian_noise_factor
             # add Gaussian noise
+            scale = std * self.gaussian_noise_factor
             arr = arr + np.random.normal(0, scale, arr.shape)
+        
+        # --- rescale to uint16
+        if self.gaussian_noise_factor or self.poisson_noise_factor:
+            arr = self._rescale(arr, axes)
         
         return arr
