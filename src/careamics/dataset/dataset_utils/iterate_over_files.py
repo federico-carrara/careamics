@@ -25,7 +25,7 @@ def iterate_over_files(
     read_source_func: Callable = read_tiff,
     read_source_kwargs: Optional[dict[str, Any]] = None,
     synthetic_noise: Optional[SyntheticNoise] = None,
-) -> Generator[tuple[NDArray, Optional[NDArray]], None, None]:
+) -> Generator[tuple[NDArray, Optional[NDArray], int]]:
     """Iterate over data source and yield whole reshaped images.
 
     Parameters
@@ -45,8 +45,8 @@ def iterate_over_files(
 
     Yields
     ------
-    NDArray
-        Image.
+    tuple[np.ndarray, Optional[np.ndarray], int]
+        A tuple containing input, target (if available), and index of the current file.
     """
     if read_source_kwargs is None:
         read_source_kwargs = {}
@@ -89,9 +89,9 @@ def iterate_over_files(
                     # reshape target
                     reshaped_target = reshape_array(target, data_config.axes)
 
-                    yield reshaped_sample, reshaped_target
+                    yield reshaped_sample, reshaped_target, i
                 else:
-                    yield reshaped_sample, None
+                    yield reshaped_sample, None, i
 
             except Exception as e:
                 logger.error(f"Error reading file {filename}: {e}")

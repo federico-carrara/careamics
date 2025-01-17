@@ -1,7 +1,8 @@
 """Prediction utility functions."""
 
 import builtins
-from typing import List, Union
+from collections import defaultdict
+from typing import DefaultDict, List, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -48,13 +49,16 @@ def stitch_prediction(
     # slice the lists and apply stitch_prediction_single to each in turn.
     for image_slice in image_slices:
         image_predictions.append(
-            stitch_prediction_single(tiles[image_slice], tile_infos[image_slice])
+            stitch_prediction_single(
+                np.asarray(tiles[image_slice]), 
+                tile_infos[image_slice]
+            )
         )
     return image_predictions
 
 
 def stitch_prediction_single(
-    tiles: List[NDArray],
+    tiles: Sequence[NDArray],
     tile_infos: List[TileInformation],
 ) -> NDArray:
     """
@@ -65,9 +69,9 @@ def stitch_prediction_single(
 
     Parameters
     ----------
-    tiles : list of numpy.ndarray
-        Cropped tiles and their respective stitching coordinates.
-    tile_infos : list of TileInformation
+    tiles : Sequence[NDArray]
+        Sequence of tiles as.
+    tile_infos : list[TileInformation]
         List of information and coordinates obtained from
         `dataset.tiled_patching.extract_tiles`.
 
@@ -110,3 +114,42 @@ def stitch_prediction_single(
         predicted_image[image_slices] = cropped_tile.astype(np.float32)
 
     return predicted_image
+
+
+def stitch_predictions_non_ordered(
+    tiles: Sequence[NDArray],
+    tile_infos: List[TileInformation],
+) -> list[np.ndarray]:
+    """Stitch predictions for non-ordered tiles.
+    
+    This can be the case when dataloaders do not return tiles in the same order as the
+    original image. Therefore, tiles of different images are mixed together.
+    In this function, we use the `sample_id` of the TileInformation to assign the tiles
+    to the different images they belong to before stitching them back together.
+    
+    Parameters
+    ----------
+    tiles : Sequence[NDArray]
+        Array or list of tiles. Can contain tiles from multiple images mixed together.
+    tile_infos : list[TileInformation]
+        List of tile information objects.
+    
+    Returns
+    -------
+    list of np.ndarray
+        List of full images.
+    """
+    # --- assign tiles to images
+    tiles_per_image: DefaultDict[int, Sequence[np.ndarray]] = defaultdict(list)
+    for tile, tile_info in zip(tiles, tile_infos):
+        tiles_per_image[tile_info.sample_id].append((tile, tile_info))
+        
+    # --- stitch images, one at a time
+    sample_ids = tuple(set([tile_info.sample_id for tile_info in tile_infos]))
+    sample_ids = sorted(sample_ids)
+    imgs = []
+    for sample_id in sample_ids:
+        tiles, tile_infos = zip(*tiles_per_image[sample_id])
+        imgs.append(stitch_prediction_single(tiles, tile_infos))
+    
+    return imgs

@@ -50,7 +50,7 @@ def prepare_tiles(
     if read_source_kwargs is None:
         read_source_kwargs = {}
     
-    num_samples = 0
+    num_samples = -1
     tile_list = []
     for filename in tqdm(fpaths, desc="Reading files"):
         try:
@@ -69,6 +69,7 @@ def prepare_tiles(
                 arr=sample,
                 tile_size=tile_size,
                 overlaps=tile_overlap,
+                file_id=num_samples,
             )
 
             # convert generator to list and add tile_list

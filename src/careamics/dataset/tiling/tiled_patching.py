@@ -1,11 +1,12 @@
 """Tiled patching utilities."""
 
 import itertools
-from typing import Generator, List, Tuple, Union
+from typing import Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
 from careamics.config.tile_information import TileInformation
+from careamics.utils.misc import get_sample_id
 
 
 def _compute_crop_and_stitch_coords_1d(
@@ -83,6 +84,7 @@ def extract_tiles(
     arr: np.ndarray,
     tile_size: Union[List[int], Tuple[int, ...]],
     overlaps: Union[List[int], Tuple[int, ...]],
+    file_id: Optional[int] = None,
 ) -> Generator[Tuple[np.ndarray, TileInformation], None, None]:
     """Generate tiles from the input array with specified overlap.
 
@@ -102,6 +104,8 @@ def extract_tiles(
         Tile sizes in each dimension, of length 2 or 3.
     overlaps : Union[List[int], Tuple[int]]
         Overlap values in each dimension, of length 2 or 3.
+    file_id : Optional[int]
+        ID of the file the array comes from, if available.
 
     Yields
     ------
@@ -109,8 +113,9 @@ def extract_tiles(
         Tile generator, yields the tile and additional information.
     """
     # Iterate over num samples (S)
-    for sample_idx in range(arr.shape[0]):
-        sample: np.ndarray = arr[sample_idx, ...]
+    num_samples = arr.shape[0]
+    for s in range(num_samples):
+        sample: np.ndarray = arr[s, ...]
 
         # Create a list of coordinates for cropping and stitching all axes.
         # [crop coordinates, stitching coordinates, overlap crop coordinates]
@@ -152,13 +157,13 @@ def extract_tiles(
             else:
                 last_tile = False
 
-            # create tile information
+            # create tile information  
             tile_info = TileInformation(
                 array_shape=sample.shape,
                 last_tile=last_tile,
                 overlap_crop_coords=overlap_crop_coords,
                 stitch_coords=stitch_coords,
-                sample_id=sample_idx,
+                sample_id=get_sample_id(file_id, s if num_samples > 1 else None),
             )
 
             yield tile, tile_info

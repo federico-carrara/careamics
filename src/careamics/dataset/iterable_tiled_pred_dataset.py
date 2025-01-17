@@ -132,7 +132,7 @@ class IterableTiledPredDataset(IterableDataset):
             self.image_means is not None and self.image_stds is not None
         ), "Mean and std must be provided"
 
-        for sample, _ in iterate_over_files(
+        for sample, _, sample_id in iterate_over_files(
             self.prediction_config,
             self.data_files,
             read_source_func=self.read_source_func,
@@ -144,6 +144,7 @@ class IterableTiledPredDataset(IterableDataset):
                 arr=sample,
                 tile_size=self.tile_size,
                 overlaps=self.tile_overlap,
+                file_id=sample_id,
             )
 
             # apply transform to patches
