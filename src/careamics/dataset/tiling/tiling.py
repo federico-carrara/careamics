@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 from careamics.config.tile_information import TileInformation
 from careamics.dataset.dataset_utils import reshape_array
-from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.dataset.tiling import extract_tiles
 from careamics.utils.logging import get_logger
 
@@ -21,7 +20,6 @@ def prepare_tiles(
     tile_overlap: Sequence[int],
     read_source_func: Callable,
     read_source_kwargs: Optional[dict[str, Any]],
-    synthetic_noise: Optional[SyntheticNoise] = None,
 ) -> list[tuple[NDArray, TileInformation]]:
     """Prepare tiles from a sequence of file paths.
     
@@ -39,8 +37,6 @@ def prepare_tiles(
         Function to read the source data.
     read_source_kwargs : Optional[dict[str, Any]]
         Keyword arguments for the read_source_func.
-    synthetic_noise : Optional[SyntheticNoise]
-        Synthetic noise object to apply to the data. Default is None.
     
     Returns
     -------
@@ -57,10 +53,6 @@ def prepare_tiles(
             sample: NDArray = read_source_func(filename, **read_source_kwargs)
             num_samples += 1
             
-            # apply synthetic noise
-            if synthetic_noise is not None:
-                sample = synthetic_noise(sample, axes=axes)
-
             # reshape array
             sample = reshape_array(sample, axes)
 
@@ -91,7 +83,6 @@ def prepare_tiles_array(
     axes: str,
     tile_size: Sequence[int],
     tile_overlap: Sequence[int],
-    synthetic_noise: Optional[SyntheticNoise] = None,
 ) -> list[tuple[NDArray, TileInformation]]:
     """Prepare tiles from an array of images.
     
@@ -105,18 +96,12 @@ def prepare_tiles_array(
         Size of the tiles.
     tile_overlap : Sequence[int]
         Overlap between tiles.
-    synthetic_noise : Optional[SyntheticNoise]
-        Synthetic noise object to apply to the data. Default is None.
         
     Returns
     -------
     list[tuple[np.ndarray, TileInformation]]
         List of tuples containing the tile and its information.
     """
-    # apply synthetic noise
-    if synthetic_noise is not None:
-        data = synthetic_noise(data, axes=axes)
-    
     # reshape array
     reshaped_sample = reshape_array(data, axes)
 

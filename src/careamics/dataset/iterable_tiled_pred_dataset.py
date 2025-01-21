@@ -8,7 +8,6 @@ from typing import Any, Callable, Generator, Optional
 from numpy.typing import NDArray
 from torch.utils.data import IterableDataset
 
-from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -30,8 +29,6 @@ class IterableTiledPredDataset(IterableDataset):
         List of data files.
     read_source_func : Callable, optional
         Read source function for custom types, by default read_tiff.
-    synthetic_noise : SyntheticNoise, optional
-        Synthetic noise object to apply to data, by default None.
     **kwargs : Any
         Additional keyword arguments, unused.
 
@@ -55,7 +52,6 @@ class IterableTiledPredDataset(IterableDataset):
         src_files: list[Path],
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
-        synthetic_noise: Optional[SyntheticNoise] = None,
         **kwargs: Any,
     ) -> None:
         """Constructor.
@@ -70,8 +66,6 @@ class IterableTiledPredDataset(IterableDataset):
             Read source function for custom types, by default read_tiff.
         read_source_kwargs : Dict[str, Any], optional
             Additional keyword arguments for the read function, by default None.
-        synthetic_noise: Optional[SyntheticNoise]
-            Synthetic noise object to apply to the data, by default None.
         **kwargs : Any
             Additional keyword arguments, unused.
 
@@ -95,7 +89,6 @@ class IterableTiledPredDataset(IterableDataset):
         self.tile_overlap = prediction_config.tile_overlap
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
-        self.synthetic_noise = synthetic_noise
 
         # check mean and std and create normalize transform
         if (
@@ -137,7 +130,6 @@ class IterableTiledPredDataset(IterableDataset):
             self.data_files,
             read_source_func=self.read_source_func,
             read_source_kwargs=self.read_source_kwargs,
-            synthetic_noise=self.synthetic_noise,
         ):
             # generate patches, return a generator of single tiles
             patch_gen = extract_tiles(

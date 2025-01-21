@@ -9,7 +9,6 @@ from typing import Any, Callable, Optional, Union
 import numpy as np
 from torch.utils.data import Dataset
 
-from careamics.dataset.dataset_utils.synthetic_noise import SyntheticNoise
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -44,8 +43,6 @@ class InMemoryDataset(Dataset):
         Read source function for custom types, by default read_tiff.
     read_source_kwargs : dict[str, Any], optional
         Additional keyword arguments for the read source function, by default None.
-    synthetic_noise : SyntheticNoise, optional
-        Synthetic noise object to apply to the data, by default None.
     **kwargs : Any
         Additional keyword arguments, unused.
     """
@@ -57,7 +54,6 @@ class InMemoryDataset(Dataset):
         input_target: Optional[Union[np.ndarray, list[Path]]] = None,
         read_source_func: Callable = read_tiff,
         read_source_kwargs: Optional[dict[str, Any]] = None,
-        synthetic_noise: Optional[SyntheticNoise] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -75,8 +71,6 @@ class InMemoryDataset(Dataset):
             Read source function for custom types, by default read_tiff.
         read_source_kwargs : dict[str, Any], optional
             Additional keyword arguments for the read source function, by default None.
-        synthetic_noise : SyntheticNoise, optional
-            Synthetic noise object to apply to the data, by default None.
         **kwargs : Any
             Additional keyword arguments, e.g., the ones related to synthetic noise.
         """
@@ -90,9 +84,6 @@ class InMemoryDataset(Dataset):
         # read function
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
-        
-        # synthetic noise
-        self.synthetic_noise = synthetic_noise
 
         # generate patches
         supervised = self.input_targets is not None
@@ -172,7 +163,6 @@ class InMemoryDataset(Dataset):
                     self.input_targets,
                     self.patch_size,
                     self.norm_strategy,
-                    self.synthetic_noise,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
@@ -184,7 +174,6 @@ class InMemoryDataset(Dataset):
                     self.read_source_func,
                     self.read_source_kwargs,
                     self.norm_strategy,
-                    self.synthetic_noise,
                 )
             else:
                 raise ValueError(
@@ -199,7 +188,6 @@ class InMemoryDataset(Dataset):
                     self.axes,
                     self.patch_size,
                     self.norm_strategy,
-                    self.synthetic_noise,
                 )
             else:
                 return prepare_patches_unsupervised(
@@ -209,7 +197,6 @@ class InMemoryDataset(Dataset):
                     self.read_source_func,
                     self.read_source_kwargs,
                     self.norm_strategy,
-                    self.synthetic_noise,
                 )
 
     def __len__(self) -> int:
