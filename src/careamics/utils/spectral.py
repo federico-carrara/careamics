@@ -185,6 +185,8 @@ class FPRefMatrix(BaseModel):
     # Create the reference matrix
     >>> ref_matrix.create()
     """
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     fp_names: Sequence[str]
     """The names of the fluorophores to include in the reference matrix."""
@@ -196,6 +198,9 @@ class FPRefMatrix(BaseModel):
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
     
+    matrix: Optional[torch.Tensor] = None
+    """The reference matrix containing the fluorophore emission spectra."""
+    
     def _fetch_fp_spectra(self) -> list[Spectrum]:
         """Fetch the fluorophore emission spectra from FPbase."""
         return [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
@@ -204,7 +209,15 @@ class FPRefMatrix(BaseModel):
         """Sort the fluorophore emission spectra by wavelength."""
         def get_wavelength_at_peak_intensity(sp: Spectrum) -> float:
             return sp.wavelength[sp.intensity.argmax()]
-        return sorted(fp_spectra, key=get_wavelength_at_peak_intensity)
+
+        sorted_spectra, sorted_fp_names = zip(
+            *sorted(
+                zip(fp_spectra, self.fp_names), 
+                key=lambda x: get_wavelength_at_peak_intensity(x[0])
+            )
+        )
+        self.fp_names = sorted_fp_names
+        return list(sorted_spectra)
     
     def _align_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
         """Align the fluorophore emission spectra on the same wavelength grid.
@@ -246,7 +259,7 @@ class FPRefMatrix(BaseModel):
             for spectrum in spectra
         ]
 
-    @classmethod
+    @staticmethod
     def _normalize(intensity: torch.Tensor) -> torch.Tensor:
         """Normalize emission spectra intensity s.t. the integral sums up to 1.
         
@@ -263,8 +276,7 @@ class FPRefMatrix(BaseModel):
         # TODO: also scale by QE and those things?
         return intensity / intensity.sum()
     
-    @cached_property
-    def matrix(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
+    def create(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
         """The matrix containing the fluorophore reference spectra.
         
         The shape of the matrix is [W, F], where W is the number of wavelength bins
@@ -292,7 +304,8 @@ class FPRefMatrix(BaseModel):
         if normalize:
             intensities = [self._normalize(intensity) for intensity in intensities]
         
-        return torch.stack([intensity for intensity in intensities], axis=1)
+        self.matrix = torch.stack([intensity for intensity in intensities], axis=1)
+        return self.matrix
         
     def add_background_spectrum(
         self, 
@@ -338,11 +351,31 @@ class FPRefMatrix(BaseModel):
             bg_spectrum_intensity = image[
                 :, coords[0], bg_yx_slices[0], bg_yx_slices[1]
             ]
-        bg_spectrum_intensity: torch.Tensor = torch.tensor(bg_spectrum_intensity)
-        bg_spectrum_intensity = bg_spectrum_intensity.mean(dim=(-1, -2))
+        bg_spectrum_intensity: np.ndarray = np.asarray(bg_spectrum_intensity)
+        bg_spectrum_intensity = bg_spectrum_intensity.mean(axis=(-1, -2))
+        bg_spectrum_intensity: torch.Tensor = torch.tensor(
+            bg_spectrum_intensity, dtype=torch.float32
+        )
         
         # normalize background spectrum
         bg_spectrum_intensity = self._normalize(bg_spectrum_intensity)
         
         # add background spectrum to the reference matrix
-        return torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
+        self.matrix = torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
+        return self.matrix
+    
+    def plot(self, **kwargs):
+        """Plot the reference matrix."""
+        assert hasattr(self, "matrix"), "Reference matrix not created yet!"
+        
+        import matplotlib.pyplot as plt
+        
+        fig, ax = plt.subplots(figsize=(10, 5))
+        labels = list(self.fp_names) + ["background"]
+        for i in range(self.matrix.shape[1]):
+            ax.plot(self.matrix[:, i], label=labels[i])
+        ax.set_xlabel("Wavelength bins")
+        ax.set_ylabel("Normalized intensity")
+        ax.set_title("Reference FP spectra")
+        ax.legend()
+        plt.show()
