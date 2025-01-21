@@ -2,7 +2,7 @@
 
 import warnings
 from functools import cached_property
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -196,58 +196,76 @@ class FPRefMatrix(BaseModel):
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
     
+    def _fetch_fp_spectra(self) -> list[Spectrum]:
+        """Fetch the fluorophore emission spectra from FPbase."""
+        return [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
+    
     def _sort_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
         """Sort the fluorophore emission spectra by wavelength."""
         def get_wavelength_at_peak_intensity(sp: Spectrum) -> float:
             return sp.wavelength[sp.intensity.argmax()]
         return sorted(fp_spectra, key=get_wavelength_at_peak_intensity)
+    
+    def _align_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
+        """Align the fluorophore emission spectra on the same wavelength grid.
+        
+        Parameters
+        ----------
+        fp_spectra : list[Spectrum]
+            The fluorophore emission spectra to align.
+        
+        Returns
+        -------
+        list[Spectrum]
+            The aligned fluorophore emission spectra.
+        """
+        fp_sp0, *rest = fp_spectra
+        aligned_fp_sp = []
+        for sp in rest:
+            fp_sp0, sp = fp_sp0._align(sp)
+            aligned_fp_sp.append(sp)
+        aligned_fp_sp = [fp_sp0] + aligned_fp_sp
+        return aligned_fp_sp
 
     @cached_property
     def fp_spectra(self) -> list[Spectrum]:
         """Aligned fluorophore emission spectra."""
         # fetch emission spectra
-        fp_sp = [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
+        fp_sp = self._fetch_fp_spectra()
         
         # sort spectra by wavelength
         fp_sp = self._sort_fp_spectra(fp_sp)
 
         # align spectra
-        fp_sp0, *rest = fp_sp
-        align_fp_sp = []
-        for sp in rest:
-            fp_sp0, sp = fp_sp0._align(sp)
-            align_fp_sp.append(sp)
-        align_fp_sp = [fp_sp0] + align_fp_sp
+        return self._align_fp_spectra(fp_sp)
 
-        return align_fp_sp
-
-    @cached_property
-    def binned_fp_intensities(self) -> list[torch.Tensor]:
+    def _bin_fp_intensities(self, spectra: list[Spectrum]) -> list[torch.Tensor]:
         """Binned fluorophore emission spectrum intensities."""
-        fp_spectra = self.fp_spectra
         return [
-            fp_spectrum.bin_intensity(self.n_bins, self.interval)
-            for fp_spectrum in fp_spectra
+            spectrum.bin_intensity(self.n_bins, self.interval)
+            for spectrum in spectra
         ]
 
-    def _normalize(self, intensities: list[torch.Tensor]) -> list[torch.Tensor]:
+    @classmethod
+    def _normalize(intensity: torch.Tensor) -> torch.Tensor:
         """Normalize emission spectra intensity s.t. the integral sums up to 1.
         
         Parameters
         ----------
-        intensities : list[torch.Tensor]
-            The intensities to normalize.
+        intensities : torch.Tensor
+            The spectrum intensity to normalize.
         
         Returns
         -------
-        list[torch.Tensor]
-            The normalized intensities.
+        torch.Tensor
+            The normalized spectrum intensity.
         """
         # TODO: also scale by QE and those things?
-        return [curr / curr.sum() for curr in intensities]
-        
-    def create(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
-        """Create the reference matrix.
+        return intensity / intensity.sum()
+    
+    @cached_property
+    def matrix(self, binned: bool = True, normalize: bool = True) -> torch.Tensor:
+        """The matrix containing the fluorophore reference spectra.
         
         The shape of the matrix is [W, F], where W is the number of wavelength bins
         and F is the number of fluorophores.
@@ -264,13 +282,67 @@ class FPRefMatrix(BaseModel):
         torch.Tensor
             The reference matrix.
         """
-        intensities = (
-            self.binned_fp_intensities 
-            if binned else [fp.intensity for fp in self.fp_spectra]
-        )
+        # get the intensities of each fluorophore spectrum
+        if binned:
+            intensities = self._bin_fp_intensities(self.fp_spectra) 
+        else:
+            intensities = [fp_spectrum.intensity for fp_spectrum in self.fp_spectra]
+        
+        # normalize the intensities
         if normalize:
-            intensities = self._normalize(intensities)
-        return torch.stack(
-            [intensity for intensity in intensities],
-            axis=1
+            intensities = [self._normalize(intensity) for intensity in intensities]
+        
+        return torch.stack([intensity for intensity in intensities], axis=1)
+        
+    def add_background_spectrum(
+        self, 
+        image: Union[np.ndarray, torch.Tensor],
+        coords: tuple[int, ...],
+        n_pixels: int = 5
+    ) -> torch.Tensor:
+        """Add a background spectrum taken from an image to the reference matrix.
+        
+        Parameters
+        ----------
+        image : Union[np.ndarray, torch.Tensor]
+            The image from which to extract the background spectrum. 
+            Shape should be (C, [Z], Y, X).
+        coords : tuple[int, ...]
+            The coordinates of the background spectrum in the image, in the form 
+            ([Z], Y, X). A square region of size [`2*n_pixels`x`2*n_pixels`] centered
+            at (Y, X) is considered to extract the background spectrum.
+        n_pixels : int
+            The size of the square region around the coordinates to consider for the
+            background spectrum. Default is 5.
+        
+        Returns
+        -------
+        torch.Tensor
+            The updated reference matrix.
+        """
+        spatial_ndims = image.ndim - 1
+        assert spatial_ndims in [2, 3], "Image must either 2D or 3D!"
+        assert len(coords) == spatial_ndims, (
+            f"Coordinates should be as many as the image spatial dimensions! "
+            f"Got instead {len(coords)} coordinates for image of shape {image.shape}."
         )
+        
+        # extract background spectrum
+        bg_yx_slices = [
+            slice(coords[-2]-n_pixels, coords[-2]+n_pixels),
+            slice(coords[-1]-n_pixels, coords[-1]+n_pixels),
+        ]
+        if spatial_ndims == 2:
+            bg_spectrum_intensity = image[:, bg_yx_slices[0], bg_yx_slices[1]]
+        elif spatial_ndims == 3:
+            bg_spectrum_intensity = image[
+                :, coords[0], bg_yx_slices[0], bg_yx_slices[1]
+            ]
+        bg_spectrum_intensity: torch.Tensor = torch.tensor(bg_spectrum_intensity)
+        bg_spectrum_intensity = bg_spectrum_intensity.mean(dim=(-1, -2))
+        
+        # normalize background spectrum
+        bg_spectrum_intensity = self._normalize(bg_spectrum_intensity)
+        
+        # add background spectrum to the reference matrix
+        return torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
