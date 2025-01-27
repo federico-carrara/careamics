@@ -16,6 +16,7 @@ from careamics.config.support import (
 )
 from careamics.config.tile_information import TileInformation
 from careamics.losses import loss_factory
+from careamics.models.lvae import LadderVAE
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
     NoiseModelLikelihood,
@@ -289,7 +290,7 @@ class VAEModule(L.LightningModule):
         # self.save_hyperparameters(self.algorithm_config.model_dump())
 
         # create model
-        self.model: nn.Module = model_factory(self.algorithm_config.model)
+        self.model: LadderVAE = model_factory(self.algorithm_config.model)
 
         # create loss function
         self.noise_model: Optional[NoiseModel] = noise_model_factory(
