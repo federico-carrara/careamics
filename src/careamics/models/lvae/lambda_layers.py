@@ -67,7 +67,7 @@ class SpectralMixer(nn.Module):
         if self.ref_matrix.requires_grad or not self.ref_learnable:
             return
         
-        if curr_epoch >= self.burn_in:
+        if curr_epoch + 1 >= self.burn_in:
             self.ref_matrix.requires_grad_(True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
