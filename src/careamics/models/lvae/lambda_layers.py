@@ -22,7 +22,7 @@ class SpectralMixer(nn.Module):
         wv_range: Sequence[int],
         ref_learnable: bool = False,
         num_bins: int = 32,
-        freeze_epochs: int = 0,
+        num_frozen_epochs: int = 0,
     ):
         """
         Parameters
@@ -35,7 +35,7 @@ class SpectralMixer(nn.Module):
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
-        freeze_epochs : int, optional
+        num_frozen_epochs : int, optional
             The number of epochs before starting learning the reference matrix.
             Default is 0.
         """
@@ -44,7 +44,7 @@ class SpectralMixer(nn.Module):
         self.wv_range = wv_range
         self.ref_learnable = ref_learnable
         self.num_bins = num_bins
-        self.freeze_epochs = freeze_epochs
+        self.num_frozen_epochs = num_frozen_epochs
         
         # get the reference matrix from FPBase
         matrix = FPRefMatrix(
@@ -54,7 +54,7 @@ class SpectralMixer(nn.Module):
         )
         self.ref_matrix = nn.Parameter(
             matrix.create(), 
-            requires_grad=self.ref_learnable and self.freeze_epochs == 0
+            requires_grad=self.ref_learnable and self.num_frozen_epochs == 0
         )
     
     def update_learnability(self, curr_epoch: int) -> None:
@@ -68,7 +68,7 @@ class SpectralMixer(nn.Module):
         if self.ref_matrix.requires_grad or not self.ref_learnable:
             return
         
-        if curr_epoch + 1 >= self.freeze_epochs:
+        if curr_epoch + 1 >= self.num_frozen_epochs:
             print("Setting spectra reference matrix to learnable.")
             self.ref_matrix.requires_grad_(True)
         

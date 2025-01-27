@@ -94,7 +94,7 @@ class LadderVAE(nn.Module):
         ref_learnable: bool = False,
         num_bins: int = 1,
         clip_unmixed: bool = True,
-        mixer_freeze_epochs: int = 0,
+        mixer_num_frozen_epochs: int = 0,
         **kwargs
     ):
         """Constructor."""
@@ -127,7 +127,7 @@ class LadderVAE(nn.Module):
         self.ref_learnable = ref_learnable
         self.in_channels = num_bins
         self.clip_unmixed = clip_unmixed
-        self.mixer_freeze_epochs = mixer_freeze_epochs
+        self.mixer_num_frozen_epochs = mixer_num_frozen_epochs
         # -------------------------------------------------------
         
 
@@ -259,7 +259,7 @@ class LadderVAE(nn.Module):
                 wv_range=self.wv_range,
                 ref_learnable=self.ref_learnable,
                 num_bins=self.in_channels,
-                freeze_epochs=self.mixer_freeze_epochs,
+                num_frozen_epochs=self.mixer_num_frozen_epochs,
             )
         else:
             self.mixer = nn.Identity()
