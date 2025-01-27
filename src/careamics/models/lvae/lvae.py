@@ -255,7 +255,7 @@ class LadderVAE(nn.Module):
         # Mixing layer to reconstruct spectrum
         if self.training_mode == "unsupervised":
             self.mixer = SpectralMixer(
-                flurophores=self.fluorophores,
+                fluorophores=self.fluorophores,
                 wv_range=self.wv_range,
                 ref_learnable=self.ref_learnable,
                 num_bins=self.in_channels,
