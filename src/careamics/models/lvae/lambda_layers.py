@@ -22,7 +22,7 @@ class SpectralMixer(nn.Module):
         wv_range: Sequence[int],
         ref_learnable: bool = False,
         num_bins: int = 32,
-        burn_in: int = 0,
+        burn_in_epochs: int = 0,
     ):
         """
         Parameters
@@ -35,8 +35,8 @@ class SpectralMixer(nn.Module):
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
-        burn_in : int, optional
-            The number of burn-in steps before starting learning the reference matrix.
+        burn_in_epochs : int, optional
+            The number of burn-in epochs before starting learning the reference matrix.
             Default is 0.
         """
         super().__init__()
@@ -44,7 +44,7 @@ class SpectralMixer(nn.Module):
         self.wv_range = wv_range
         self.ref_learnable = ref_learnable
         self.num_bins = num_bins
-        self.burn_in = burn_in
+        self.burn_in_epochs = burn_in_epochs
         
         # get the reference matrix from FPBase
         matrix = FPRefMatrix(
@@ -53,7 +53,8 @@ class SpectralMixer(nn.Module):
             interval=self.wv_range
         )
         self.ref_matrix = nn.Parameter(
-            matrix.create(), requires_grad=self.ref_learnable and self.burn_in == 0
+            matrix.create(), 
+            requires_grad=self.ref_learnable and self.burn_in_epochs == 0
         )
     
     def update_learnability(self, curr_epoch: int) -> None:
@@ -67,7 +68,7 @@ class SpectralMixer(nn.Module):
         if self.ref_matrix.requires_grad or not self.ref_learnable:
             return
         
-        if curr_epoch + 1 >= self.burn_in:
+        if curr_epoch + 1 >= self.burn_in_epochs:
             self.ref_matrix.requires_grad_(True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
