@@ -69,6 +69,7 @@ class SpectralMixer(nn.Module):
             return
         
         if curr_epoch + 1 >= self.burn_in_epochs:
+            print("Setting spectra reference matrix to learnable.")
             self.ref_matrix.requires_grad_(True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
