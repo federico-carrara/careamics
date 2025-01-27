@@ -18,15 +18,16 @@ class SpectralMixer(nn.Module):
     """
     def __init__(
         self,
-        flurophores: Sequence[str],
+        fluorophores: Sequence[str],
         wv_range: Sequence[int],
         ref_learnable: bool = False,
         num_bins: int = 32,
+        burn_in: int = 0,
     ):
         """
         Parameters
         ----------
-        flurophores : Sequence[str]
+        fluorophores : Sequence[str]
             A sequence of fluorophore names.
         wv_range : Sequence[int]
             The wavelength range of the spectral image.
@@ -34,13 +35,41 @@ class SpectralMixer(nn.Module):
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
+        burn_in : int, optional
+            The number of burn-in steps before starting learning the reference matrix.
+            Default is 0.
         """
         super().__init__()
+        self.fluorophores = fluorophores
+        self.wv_range = wv_range
+        self.ref_learnable = ref_learnable
+        self.num_bins = num_bins
+        self.burn_in = burn_in
         
         # get the reference matrix from FPBase
-        matrix = FPRefMatrix(fp_names=flurophores, n_bins=num_bins, interval=wv_range)
-        self.ref_matrix = nn.Parameter(matrix.create(), requires_grad=ref_learnable)
+        matrix = FPRefMatrix(
+            fp_names=self.fluorophores,
+            n_bins=self.num_bins,
+            interval=self.wv_range
+        )
+        self.ref_matrix = nn.Parameter(
+            matrix.create(), requires_grad=self.ref_learnable and self.burn_in == 0
+        )
     
+    def _make_learnable(self, curr_epoch: int) -> None:
+        """Make the reference matrix learnable.
+        
+        Parameters
+        ----------
+        curr_epoch : int
+            The current epoch.
+        """
+        if self.ref_matrix.requires_grad or not self.ref_learnable:
+            return
+        
+        if curr_epoch >= self.burn_in:
+            self.ref_matrix.requires_grad_(True)
+        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
         
