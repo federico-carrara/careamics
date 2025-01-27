@@ -56,8 +56,8 @@ class SpectralMixer(nn.Module):
             matrix.create(), requires_grad=self.ref_learnable and self.burn_in == 0
         )
     
-    def _make_learnable(self, curr_epoch: int) -> None:
-        """Make the reference matrix learnable.
+    def update_learnability(self, curr_epoch: int) -> None:
+        """Update the reference matrix learnability.
         
         Parameters
         ----------

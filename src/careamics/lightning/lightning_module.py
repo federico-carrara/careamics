@@ -428,13 +428,18 @@ class VAEModule(L.LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         """Validation epoch end."""
+        # --- log metrics ---
         if self.model.training_mode == "supervised":
             psnr_ = self.reduce_running_psnr()
             if psnr_ is not None:
                 self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)
             else:
                 self.log("val_psnr", 0.0, on_epoch=True, prog_bar=True)
-
+        
+        # --- update learnability of layers (depending on `current_epoch`) ---
+        self.model.mixer.update_learnability(self.current_epoch)
+    
+    
     def predict_step(self, batch: Tensor, batch_idx: Any) -> Any:
         """Prediction step.
 
