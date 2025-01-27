@@ -339,6 +339,9 @@ class FPRefMatrix(BaseModel):
             f"Coordinates should be as many as the image spatial dimensions! "
             f"Got instead {len(coords)} coordinates for image of shape {image.shape}."
         )
+        assert self.matrix.shape[1] <= len(self.fp_names), (
+            "Background spectrum already added!"
+        )
         
         # extract background spectrum
         bg_yx_slices = [
