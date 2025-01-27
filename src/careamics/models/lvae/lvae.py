@@ -91,7 +91,11 @@ class LadderVAE(nn.Module):
         analytical_kl: bool,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
-        **kwargs,
+        ref_learnable: bool = False,
+        num_bins: int = 1,
+        clip_unmixed: bool = True,
+        burn_in_epochs: int = 0,
+        **kwargs
     ):
         """Constructor."""
         super().__init__()
@@ -117,12 +121,13 @@ class LadderVAE(nn.Module):
         
         
         # -------------------------------------------------------
-        # Additional attributes λsplit
+        # Additional attributes for λSplit
         self.fluorophores = fluorophores
         self.wv_range = wv_range
-        self.ref_learnable = kwargs.get("ref_learnable", False)
-        self.in_channels = kwargs.get("num_bins", 1)
-        self.clip_unmixed = kwargs.get("clip_unmixed", False)
+        self.ref_learnable = ref_learnable
+        self.in_channels = num_bins
+        self.clip_unmixed = clip_unmixed
+        self.burn_in_epochs = burn_in_epochs
         # -------------------------------------------------------
         
 
@@ -254,6 +259,7 @@ class LadderVAE(nn.Module):
                 wv_range=self.wv_range,
                 ref_learnable=self.ref_learnable,
                 num_bins=self.in_channels,
+                burn_in_epochs=self.burn_in_epochs,
             )
         else:
             self.mixer = nn.Identity()
