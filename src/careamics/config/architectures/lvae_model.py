@@ -53,6 +53,8 @@ class LVAEModel(ArchitectureModel):
     """Number of bins for the spectral data."""
     clip_unmixed: bool = True
     """Whether to clip negative values in the unmixed spectra to 0."""
+    mixer_num_frozen_epochs: int = Field(default=0)
+    """Number of epochs before starting to learn the spectra reference matrix."""
     
     @model_validator(mode="after")
     def validate_conv_strides(self: Self) -> Self:

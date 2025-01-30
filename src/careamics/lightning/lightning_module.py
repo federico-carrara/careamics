@@ -16,6 +16,7 @@ from careamics.config.support import (
 )
 from careamics.config.tile_information import TileInformation
 from careamics.losses import loss_factory
+from careamics.models.lvae import LadderVAE
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
     NoiseModelLikelihood,
@@ -289,7 +290,7 @@ class VAEModule(L.LightningModule):
         # self.save_hyperparameters(self.algorithm_config.model_dump())
 
         # create model
-        self.model: nn.Module = model_factory(self.algorithm_config.model)
+        self.model: LadderVAE = model_factory(self.algorithm_config.model)
 
         # create loss function
         self.noise_model: Optional[NoiseModel] = noise_model_factory(
@@ -382,7 +383,8 @@ class VAEModule(L.LightningModule):
 
         # Logging
         # TODO: implement a separate logging method?
-        self.log_dict(loss, on_step=True, on_epoch=True)
+        batch_size = x.shape[0]
+        self.log_dict(loss, on_step=True, on_epoch=True, batch_size=batch_size)
         # self.log("lr", self, on_epoch=True)
         return loss
 
@@ -418,22 +420,39 @@ class VAEModule(L.LightningModule):
 
         # Logging
         # Rename val_loss dict
+        batch_size = x.shape[0]
         loss = {"_".join(["val", k]): v for k, v in loss.items()}
-        self.log_dict(loss, on_epoch=True, prog_bar=True)
+        self.log_dict(loss, on_epoch=True, prog_bar=True, batch_size=batch_size)
         if self.model.training_mode == "supervised":
             curr_psnr = self.compute_val_psnr(out, target)
             for i, psnr in enumerate(curr_psnr):
-                self.log(f"val_psnr_ch{i+1}_batch", psnr, on_epoch=True)
+                self.log(
+                    f"val_psnr_ch{i+1}_batch", 
+                    psnr, 
+                    on_epoch=True,
+                    batch_size=batch_size,
+                )
 
     def on_validation_epoch_end(self) -> None:
         """Validation epoch end."""
+        # --- log metrics ---
         if self.model.training_mode == "supervised":
             psnr_ = self.reduce_running_psnr()
             if psnr_ is not None:
-                self.log("val_psnr", psnr_, on_epoch=True, prog_bar=True)
+                self.log(
+                    "val_psnr", 
+                    psnr_, 
+                    on_epoch=True, 
+                    prog_bar=True,
+                    batch_size=1
+                )
             else:
-                self.log("val_psnr", 0.0, on_epoch=True, prog_bar=True)
-
+                self.log("val_psnr", 0.0, on_epoch=True, prog_bar=True, batch_size=1)
+        
+        # --- update learnability of layers (depending on `current_epoch`) ---        
+        self.model.mixer.update_learnability(self.current_epoch)
+    
+    
     def predict_step(self, batch: Tensor, batch_idx: Any) -> Any:
         """Prediction step.
 

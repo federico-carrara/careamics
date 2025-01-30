@@ -18,15 +18,16 @@ class SpectralMixer(nn.Module):
     """
     def __init__(
         self,
-        flurophores: Sequence[str],
+        fluorophores: Sequence[str],
         wv_range: Sequence[int],
         ref_learnable: bool = False,
         num_bins: int = 32,
+        num_frozen_epochs: int = 0,
     ):
         """
         Parameters
         ----------
-        flurophores : Sequence[str]
+        fluorophores : Sequence[str]
             A sequence of fluorophore names.
         wv_range : Sequence[int]
             The wavelength range of the spectral image.
@@ -34,13 +35,43 @@ class SpectralMixer(nn.Module):
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
+        num_frozen_epochs : int, optional
+            The number of epochs before starting learning the reference matrix.
+            Default is 0.
         """
         super().__init__()
+        self.fluorophores = fluorophores
+        self.wv_range = wv_range
+        self.ref_learnable = ref_learnable
+        self.num_bins = num_bins
+        self.num_frozen_epochs = num_frozen_epochs
         
         # get the reference matrix from FPBase
-        matrix = FPRefMatrix(fp_names=flurophores, n_bins=num_bins, interval=wv_range)
-        self.ref_matrix = nn.Parameter(matrix.create(), requires_grad=ref_learnable)
+        matrix = FPRefMatrix(
+            fp_names=self.fluorophores,
+            n_bins=self.num_bins,
+            interval=self.wv_range
+        )
+        self.ref_matrix = nn.Parameter(
+            matrix.create(), 
+            requires_grad=self.ref_learnable and self.num_frozen_epochs == 0
+        )
     
+    def update_learnability(self, curr_epoch: int) -> None:
+        """Update the reference matrix learnability.
+        
+        Parameters
+        ----------
+        curr_epoch : int
+            The current epoch.
+        """
+        if self.ref_matrix.requires_grad or not self.ref_learnable:
+            return
+        
+        if curr_epoch + 1 >= self.num_frozen_epochs:
+            print("\nSetting spectra reference matrix to learnable.")
+            self.ref_matrix.requires_grad_(True)
+        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
         

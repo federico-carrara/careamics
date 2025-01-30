@@ -24,7 +24,7 @@ class KLLossConfig(BaseModel):
     """Epoch at which KL loss annealing starts."""
     annealtime: int = 10
     """Number of epochs for which KL loss annealing is applied."""
-    current_epoch: int = 0
+    current_epoch: int = 0 # TODO: done by lightning, remove (?)
     """Current epoch in the training loop."""
 
 
