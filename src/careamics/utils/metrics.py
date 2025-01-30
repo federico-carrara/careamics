@@ -246,15 +246,12 @@ def multiscale_ssim(
 
     It allows to use either standard multiscale SSIM or its range-invariant version.
 
-    NOTE: images fed to this function should have channels dimension as the last one.
-    # TODO: do we want to allow this behavior? or we want the usual (N, C, H, W)?
-
     Parameters
     ----------
     gt_ : Union[np.ndarray, torch.Tensor]
-        Ground truth image with shape (N, H, W, C).
+        Ground truth image with shape (N, C, [Z], Y, X).
     pred_ : Union[np.ndarray, torch.Tensor]
-        Predicted image with shape (N, H, W, C).
+        Predicted image with shape (N, C, [Z], Y, X).
     range_invariant : bool
         Whether to use standard or range invariant multiscale SSIM.
 
@@ -265,8 +262,8 @@ def multiscale_ssim(
     """
     ms_ssim_values = {}
     for ch_idx in range(gt_.shape[-1]):
-        tar_tmp = gt_[..., ch_idx]
-        pred_tmp = pred_[..., ch_idx]
+        tar_tmp = gt_[:, ch_idx, ...]
+        pred_tmp = pred_[:, ch_idx, ...]
         if range_invariant:
             ms_ssim_values[ch_idx] = _range_invariant_multiscale_ssim(
                 gt_=tar_tmp, pred_=pred_tmp
@@ -279,7 +276,7 @@ def multiscale_ssim(
                 torch.Tensor(pred_tmp[:, None]), torch.Tensor(tar_tmp[:, None])
             ).item()
 
-    return [ms_ssim_values[i] for i in range(gt_.shape[-1])]  # type: ignore
+    return [ms_ssim_values[i] for i in range(gt_.shape[1])]  # type: ignore
 
 
 def _avg_psnr(target: np.ndarray, prediction: np.ndarray, psnr_fn: Callable) -> float:
@@ -392,5 +389,13 @@ def lpips(
     float
         LPIPS value over the batch.
     """
+    assert prediction.shape == target.shape, "Prediction and target shapes must match."
+    assert prediction.max() <= 1 and prediction.min() >= 0, (
+        "Prediction must be normalized in [0, 1]."
+    )
+    assert target.max() <= 1 and target.min() >= 0, (
+        "Target must be normalized in [0, 1]."
+    )
+    
     lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze', reduction='mean', normalize=True)
     return lpips(torch.Tensor(prediction), torch.Tensor(target)).item()
