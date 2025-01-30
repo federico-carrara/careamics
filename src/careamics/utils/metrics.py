@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from torchmetrics.image import MultiScaleStructuralSimilarityIndexMeasure
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 # TODO: does this add additional dependency?
 
@@ -366,3 +367,30 @@ def avg_ssim(
         for i in range(len(target))
     ]
     return np.mean(ssim), np.std(ssim)
+
+
+def lpips(
+    prediction: Union[np.ndarray, torch.Tensor], 
+    target: Union[np.ndarray, torch.Tensor]
+) -> float:
+    """Compute the Learned Perceptual Image Patch Similarity (LPIPS) over images.
+    
+    NOTES:
+    - LPIPS can use different networks. Here we use the SqueezeNet model.
+    - The inputs are expected to be normalized in the range [0, 1].
+    - We use the mean reduction, i.e., the LPIPS value is averaged over the batch.
+
+    Parameters
+    ----------
+    prediction : Union[np.ndarray, torch.Tensor]
+        Array of predicted images, shape is (N, C, [Z], Y, X).
+    target : Union[np.ndarray, torch.Tensor]
+        Array of ground truth images, shape is (N, C, [Z], Y, X).
+
+    Returns
+    -------
+    float
+        LPIPS value over the batch.
+    """
+    lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze', reduction='mean', normalize=True)
+    return lpips(torch.Tensor(prediction), torch.Tensor(target)).item()
