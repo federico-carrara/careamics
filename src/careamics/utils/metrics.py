@@ -199,7 +199,7 @@ class RunningPSNR:
         return 20 * torch.log10((self.max - self.min) / rmse)
 
 
-def _range_invariant_multiscale_ssim(
+def range_invariant_multiscale_ssim(
     gt_: Union[np.ndarray, torch.Tensor], pred_: Union[np.ndarray, torch.Tensor]
 ) -> float:
     """Compute range invariant multiscale SSIM for a single channel.
@@ -213,9 +213,9 @@ def _range_invariant_multiscale_ssim(
     Parameters
     ----------
     gt_ : Union[np.ndarray, torch.Tensor]
-        Ground truth image with shape (N, H, W).
+        Ground truth image with shape (N, [Z], Y, X).
     pred_ : Union[np.ndarray, torch.Tensor]
-        Predicted image with shape (N, H, W).
+        Predicted image with shape (N, [Z], Y, X).
 
     Returns
     -------
@@ -223,18 +223,29 @@ def _range_invariant_multiscale_ssim(
         Range invariant multiscale SSIM value.
     """
     shape = gt_.shape
-    gt_ = torch.Tensor(gt_.reshape((shape[0], -1)))
-    pred_ = torch.Tensor(pred_.reshape((shape[0], -1)))
+    gt_ = torch.tensor(gt_.reshape((shape[0], -1)), dtype=torch.float32)
+    pred_ = torch.tensor(pred_.reshape((shape[0], -1)), dtype=torch.float32)
     gt_ = _zero_mean(gt_)
     pred_ = _zero_mean(pred_)
     pred_ = _fix(gt_, pred_)
     pred_ = pred_.reshape(shape)
     gt_ = gt_.reshape(shape)
-
+    # add channel dimension
+    pred_ = pred_[:, None]
+    gt_ = gt_[:, None]
+    
+    
     ms_ssim = MultiScaleStructuralSimilarityIndexMeasure(
         data_range=gt_.max() - gt_.min()
     )
-    return ms_ssim(torch.Tensor(pred_[:, None]), torch.Tensor(gt_[:, None])).item()
+    if len(pred_.shape) == 5: # 3D input
+        # iterate over Z-stack
+        return np.mean([
+            ms_ssim(pred_[:, :, i], gt_[:, :, i]).item()
+            for i in range(pred_.shape[2])
+        ])
+    else: # 2D input
+        return ms_ssim(pred_, gt_).item()
 
 
 def multiscale_ssim(
@@ -265,7 +276,7 @@ def multiscale_ssim(
         tar_tmp = gt_[:, ch_idx, ...]
         pred_tmp = pred_[:, ch_idx, ...]
         if range_invariant:
-            ms_ssim_values[ch_idx] = _range_invariant_multiscale_ssim(
+            ms_ssim_values[ch_idx] = range_invariant_multiscale_ssim(
                 gt_=tar_tmp, pred_=pred_tmp
             )
         else:
@@ -372,6 +383,8 @@ def lpips(
 ) -> float:
     """Compute the Learned Perceptual Image Patch Similarity (LPIPS) over images.
     
+    If inputs are 3D, LPIPS is averaged over the Z-stack.
+    
     NOTES:
     - LPIPS can use different networks. Here we use the SqueezeNet model.
     - The inputs are expected to be normalized in the range [0, 1].
@@ -397,5 +410,25 @@ def lpips(
         "Target must be normalized in [0, 1]."
     )
     
-    lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze', reduction='mean', normalize=True)
-    return lpips(torch.Tensor(prediction), torch.Tensor(target)).item()
+    # check if GPU is available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # compute LPIPS
+    lpips = LearnedPerceptualImagePatchSimilarity(
+        net_type='squeeze', reduction='mean', normalize=True
+    ).to(device)
+    
+    if len(prediction.shape) == 5: # 3D input
+        # iterate over Z-stack
+        return np.mean([
+            lpips(
+                torch.tensor(prediction[:, :, i], device=device, dtype=torch.float32),
+                torch.tensor(target[:, :, i], device=device, dtype=torch.float32)
+            ).item()
+            for i in range(prediction.shape[2])
+        ])
+    else:
+        return lpips(
+            torch.tensor(prediction, device=device, dtype=torch.float32),
+            torch.tensor(target, device=device, dtype=torch.float32)
+        ).item()
