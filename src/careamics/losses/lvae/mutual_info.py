@@ -212,13 +212,13 @@ def soft_histogram2d(
 def mutual_information(
     x1: Tensor,
     x2: Tensor,
-    centers: Tensor,
+    num_bins: int,
     method: Literal["gaussian", "sigmoid"],
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
     epsilon: float = 1e-10
 ) -> Tensor:
-    """Calculate the mutual information between two input tensors.
+    """Calculate the (differentiable) mutual information between two input tensors.
     
     This implementation uses the KL divergence definition of mutual information.
     
@@ -228,8 +228,8 @@ def mutual_information(
         Input tensor with shape (B, N) (e.g., a flattened image).
     x2: Tensor
         Input tensor with shape (B, N) (e.g., a flattened image).
-    centers: Tensor
-        The centers of the histogram bins with shape (K).
+    num_bins: int
+        The number of bins to use for the histogram.
     method: Literal["gaussian", "sigmoid"]
         The method to compute the soft histogram.
     gaussian_sigma: float, optional
@@ -246,9 +246,14 @@ def mutual_information(
     Tensor
         The mutual information between the two input tensors, shape is (B).
     """
+    # calculate the bin centers
+    min_ = torch.min(torch.min(x1), torch.min(x2))
+    max_ = torch.max(torch.max(x1), torch.max(x2))
+    bin_centers = torch.linspace(min_, max_, num_bins + 1, device=x1.device)
+    
     # calculate the joint PDF
     joint_pdf = soft_histogram2d(
-        x1, x2, centers, method,
+        x1, x2, bin_centers, method,
         gaussian_sigma=gaussian_sigma,
         sigmoid_scale=sigmoid_scale,
         density=True,
@@ -257,14 +262,14 @@ def mutual_information(
     
     # calculate the marginal PDFs
     marginal_pdf1 = soft_histogram(
-        x1, centers, method, 
+        x1, bin_centers, method, 
         gaussian_sigma=gaussian_sigma,
         sigmoid_scale=sigmoid_scale,
         density=True,
         epsilon=epsilon
     )
     marginal_pdf2 = soft_histogram(
-        x2, centers, method,
+        x2, bin_centers, method,
         gaussian_sigma=gaussian_sigma,
         sigmoid_scale=sigmoid_scale,
         density=True,
