@@ -110,6 +110,7 @@ def soft_histogram(
     x: Tensor,
     centers: Tensor,
     method: Literal["gaussian", "sigmoid"],
+    *,
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
     density: bool = True,
@@ -161,6 +162,7 @@ def soft_histogram2d(
     x2: Tensor,
     centers: Tensor,
     method: Literal["gaussian", "sigmoid"],
+    *,
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
     density: bool = True,
@@ -205,3 +207,76 @@ def soft_histogram2d(
         return joint_kernel_values / normalization
 
     return joint_kernel_values
+
+
+def mutual_information(
+    x1: Tensor,
+    x2: Tensor,
+    centers: Tensor,
+    method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: Optional[float] = 0.5,
+    sigmoid_scale: Optional[float] = 10.0,
+    epsilon: float = 1e-10
+) -> Tensor:
+    """Calculate the mutual information between two input tensors.
+    
+    This implementation uses the KL divergence definition of mutual information.
+    
+    Parameters
+    ----------
+    x1: Tensor
+        Input tensor with shape (B, N) (e.g., a flattened image).
+    x2: Tensor
+        Input tensor with shape (B, N) (e.g., a flattened image).
+    centers: Tensor
+        The centers of the histogram bins with shape (K).
+    method: Literal["gaussian", "sigmoid"]
+        The method to compute the soft histogram.
+    gaussian_sigma: float, optional
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is
+        recommended to get sharp binning functions. Default is 0.5.
+    sigmoid_scale: float, optional
+        The scaling factor of the sigmoid kernel. A value greater than 10 is
+        recommended to get sharp binning functions. Default is 10.0.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+        
+    Returns
+    -------
+    Tensor
+        The mutual information between the two input tensors, shape is (B).
+    """
+    # calculate the joint PDF
+    joint_pdf = soft_histogram2d(
+        x1, x2, centers, method,
+        gaussian_sigma=gaussian_sigma,
+        sigmoid_scale=sigmoid_scale,
+        density=True,
+        epsilon=epsilon
+    )
+    
+    # calculate the marginal PDFs
+    marginal_pdf1 = soft_histogram(
+        x1, centers, method, 
+        gaussian_sigma=gaussian_sigma,
+        sigmoid_scale=sigmoid_scale,
+        density=True,
+        epsilon=epsilon
+    )
+    marginal_pdf2 = soft_histogram(
+        x2, centers, method,
+        gaussian_sigma=gaussian_sigma,
+        sigmoid_scale=sigmoid_scale,
+        density=True,
+        epsilon=epsilon
+    )
+    
+    # calculate the mutual information (using KL definition)
+    return torch.sum(
+        joint_pdf * (
+            torch.log(joint_pdf + epsilon) - 
+            torch.log(marginal_pdf1 + epsilon) - 
+            torch.log(marginal_pdf2 + epsilon)
+        ), 
+        dim=(1, 2)
+    )
