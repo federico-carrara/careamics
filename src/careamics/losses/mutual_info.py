@@ -1,4 +1,8 @@
-"""Implementation of differentiable histogram functions for the computation of mutual information."""
+"""Implementation of differentiable histogram functions for the computation of mutual information.
+
+Inspired by:
+- https://matthew-brett.github.io/teaching/mutual_information.html
+"""
 
 from typing import Literal, Optional
 
@@ -278,11 +282,12 @@ def mutual_information(
     )
     
     # calculate the mutual information (using KL definition)
+    px_py = marginal_pdf1.unsqueeze(2) * marginal_pdf2.unsqueeze(1)
+    non_zero = joint_pdf > 0.0 # negative values do not contribute to the sum
     return torch.sum(
-        joint_pdf * (
-            torch.log(joint_pdf + epsilon) - 
-            torch.log(marginal_pdf1 + epsilon) - 
-            torch.log(marginal_pdf2 + epsilon)
-        ), 
-        dim=(1, 2)
+        joint_pdf[non_zero] * (
+            torch.log(joint_pdf[non_zero]) - torch.log(px_py[non_zero])
+        )
     )
+    
+    #TODO: implement normalized mutual information
