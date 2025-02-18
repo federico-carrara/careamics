@@ -68,7 +68,7 @@ def _sigmoid_kernel_binning(
     centers = centers.unsqueeze(0).unsqueeze(0)
     
     # compute kernel values
-    delta = centers[1] - centers[0] # bin width
+    delta = centers[..., 1] - centers[..., 0] # bin width
     arg1 = scale * (x - (centers - delta / 2))
     arg2 = scale * (x - (centers + delta / 2))
     return torch.sigmoid(arg1) - torch.sigmoid(arg2)
@@ -115,7 +115,7 @@ def soft_histogram(
     sigmoid_scale: Optional[float] = 10.0,
     density: bool = True,
     epsilon: float = 1e-10
-) -> tuple[Tensor, Tensor]:
+) -> Tensor:
     """Calculate the soft (differentiable) histogram (i.e., marginal PDF).
     
     The calculation uses either a Gaussian or a sigmoid kernel centered on the bin
@@ -140,7 +140,7 @@ def soft_histogram(
 
     Returns
     -------
-    tuple[Tensor, Tensor]
+    Tensor
         The soft histogram (marginal PDF) for the input tensor, shape is (B, K).
     """
     # bin input using kernel functions
@@ -249,8 +249,9 @@ def mutual_information(
     # calculate the bin centers
     min_ = torch.min(torch.min(x1), torch.min(x2))
     max_ = torch.max(torch.max(x1), torch.max(x2))
-    bin_centers = torch.linspace(min_, max_, num_bins + 1, device=x1.device)
-    
+    bins = torch.linspace(min_, max_, num_bins + 1, device=x1.device)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+
     # calculate the joint PDF
     joint_pdf = soft_histogram2d(
         x1, x2, bin_centers, method,
