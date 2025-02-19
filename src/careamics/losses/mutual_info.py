@@ -110,6 +110,69 @@ def _kernel_binning(
     return kernel_values
 
 
+def _get_marginal_pdf(
+    kernel_values: Tensor, density: bool = True, epsilon: float = 1e-10
+) -> Tensor:
+    """Compute the marginal PDF from a variable's kernel binning values."""
+    # average over samples to get the soft histogram
+    hist = torch.mean(kernel_values, dim=1)
+    
+    # normalize to get the PDF (optional)
+    normalization = 1
+    if density:
+        normalization = torch.sum(hist, dim=1).unsqueeze(1) + epsilon
+    return hist / normalization
+
+
+def _get_joint_pdf(
+    kernel_values1: Tensor,
+    kernel_values2: Tensor,
+    density: bool = True,
+    epsilon: float = 1e-10
+) -> Tensor:
+    """Compute the joint PDF from two variables kernel binning values."""
+    # calculate joint kernel values
+    joint_kernel_values = torch.matmul(kernel_values1.transpose(1, 2), kernel_values2)
+
+    # normalize to get the PDF (optional)
+    normalization = 1
+    if density:
+        normalization = torch.sum(
+            joint_kernel_values, dim=(1, 2)
+        ).view(-1, 1, 1) + epsilon
+    return joint_kernel_values / normalization
+
+
+def _compute_mutual_info(
+    marginal_x: Tensor, marginal_y: Tensor, joint: Tensor
+) -> float:
+    """Compute the mutual information from marginal and joint distributions.
+    
+    This implementation uses the KL divergence definition of mutual information.
+    
+    Parameters
+    ----------
+    marginal_x: Tensor
+        The marginal PDF of the first variable with shape (B, K).
+    marginal_y: Tensor
+        The marginal PDF of the second variable with shape (B, K).
+    joint: Tensor
+        The joint PDF of the two variables with shape (B, K, K).
+    
+    Returns
+    -------
+    float
+        The mutual information between the two variables described by the PDFs.
+    """
+    px_py = marginal_x.unsqueeze(2) * marginal_y.unsqueeze(1)
+    non_zero = joint > 0.0
+    return torch.sum(
+        joint[non_zero] * (
+            torch.log(joint[non_zero]) - torch.log(px_py[non_zero])
+        )
+    )
+
+
 def soft_histogram(
     x: Tensor,
     centers: Tensor,
@@ -150,15 +213,8 @@ def soft_histogram(
     # bin input using kernel functions
     kernel_values = _kernel_binning(x, centers, method, gaussian_sigma, sigmoid_scale)
 
-    # average over samples to get the soft histogram
-    hist = torch.mean(kernel_values, dim=1)
-    
-    # normalize to get the PDF (optional)
-    if density:
-        normalization = torch.sum(hist, dim=1).unsqueeze(1) + epsilon
-        return hist / normalization
-
-    return hist
+    # calculate histogram/PDF
+    return _get_marginal_pdf(kernel_values, density, epsilon)
 
 
 def soft_histogram2d(
@@ -202,15 +258,8 @@ def soft_histogram2d(
     kernel_values1 = _kernel_binning(x1, centers, method, gaussian_sigma, sigmoid_scale)
     kernel_values2 = _kernel_binning(x2, centers, method, gaussian_sigma, sigmoid_scale)
 
-    # calculate joint PDF
-    joint_kernel_values = torch.matmul(kernel_values1.transpose(1, 2), kernel_values2)
-    
-    # normalize to get the PDF (optional)
-    if density:
-        normalization = torch.sum(joint_kernel_values, dim=(1, 2)).view(-1, 1, 1) + epsilon
-        return joint_kernel_values / normalization
-
-    return joint_kernel_values
+    # calculate joint histogram/PDF
+    return _get_joint_pdf(kernel_values1, kernel_values2, density, epsilon)
 
 
 def mutual_information(
@@ -221,11 +270,11 @@ def mutual_information(
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
     epsilon: float = 1e-10
-) -> Tensor:
-    """Calculate the (differentiable) mutual information between two input tensors.
-    
+) -> float:
+    """Calculate the (differentiable) mutual information between two input batches.
+
     This implementation uses the KL divergence definition of mutual information.
-    
+
     Parameters
     ----------
     x1: Tensor
@@ -244,11 +293,11 @@ def mutual_information(
         recommended to get sharp binning functions. Default is 10.0.
     epsilon: float, optional
         A small value to avoid numerical instability. Default is 1e-10.
-        
+
     Returns
     -------
-    Tensor
-        The mutual information between the two input tensors, shape is (B).
+    float
+        The mutual information between the two input batches.
     """
     # calculate the bin centers
     min_ = torch.min(torch.min(x1), torch.min(x2))
@@ -264,7 +313,7 @@ def mutual_information(
         density=True,
         epsilon=epsilon
     )
-    
+
     # calculate the marginal PDFs
     marginal_pdf1 = soft_histogram(
         x1, bin_centers, method, 
@@ -280,14 +329,82 @@ def mutual_information(
         density=True,
         epsilon=epsilon
     )
-    
+
     # calculate the mutual information (using KL definition)
-    px_py = marginal_pdf1.unsqueeze(2) * marginal_pdf2.unsqueeze(1)
-    non_zero = joint_pdf > 0.0 # negative values do not contribute to the sum
-    return torch.sum(
-        joint_pdf[non_zero] * (
-            torch.log(joint_pdf[non_zero]) - torch.log(px_py[non_zero])
-        )
-    )
-    
+    return _compute_mutual_info(marginal_pdf1, marginal_pdf2, joint_pdf)
     #TODO: implement normalized mutual information
+
+
+def pairwise_mutual_information(
+    inputs: Tensor,
+    num_bins: int,
+    method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: Optional[float] = 0.5,
+    sigmoid_scale: Optional[float] = 10.0,
+    epsilon: float = 1e-10    
+) -> list[float]:
+    """Calculate the (differentiable) pairwise mutual information between input
+    channels.
+
+    Parameters
+    ----------
+    inputs: Tensor
+        Input tensor with shape (B, C, Z, Y, X).
+    num_bins: int
+        The number of bins to use for the histogram.
+    method: Literal["gaussian", "sigmoid"]
+        The method to compute the soft histogram.
+    gaussian_sigma: float, optional
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is
+        recommended to get sharp binning functions. Default is 0.5.
+    sigmoid_scale: float, optional
+        The scaling factor of the sigmoid kernel. A value greater than 10 is
+        recommended to get sharp binning functions. Default is 10.0.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+        
+    Returns
+    -------
+    list[float]
+        The pairwise mutual information between input channels.
+    """
+    C = inputs.shape[1]
+    # calculate the bin centers
+    min_ = min([torch.min(inputs[:, i]) for i in range(C)])
+    max_ = max([torch.max(inputs[:, i]) for i in range(C)])
+    bins = torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    
+    # Create binnings for each channel
+    kernel_values = [
+        _kernel_binning(
+            inputs[:, i].flatten(1),
+            bin_centers,
+            method,
+            gaussian_sigma=gaussian_sigma,
+            sigmoid_scale=sigmoid_scale
+        )
+        for i in range(C)
+    ]
+    
+    # Create marginal PDFs for each channel
+    marginal_pdfs = [
+        _get_marginal_pdf(kernel_values[i], epsilon)
+        for i in range(C)
+    ]
+    
+    # Get all pairwise joint pdfs
+    joint_pdfs = {
+        f"{i}_{j}" : _get_joint_pdf(kernel_values[i], kernel_values[j], epsilon)
+        for i in range(C)
+        for j in range(i + 1, C)
+    }
+    
+    # Calculate the pairwise mutual information
+    return [
+        _compute_mutual_info(
+            marginal_pdfs[i], marginal_pdfs[j], joint_pdfs[f"{i}_{j}"]
+        )
+        for i in range(C)
+        for j in range(i + 1, C)
+    ]

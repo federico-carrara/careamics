@@ -9,9 +9,10 @@ __all__ = [
     "musplit_loss",
     "denoisplit_musplit_loss",
     "mutual_information",
+    "pairwise_mutual_information",
 ]
 
 from .fcn.losses import mae_loss, mse_loss, n2v_loss
 from .loss_factory import loss_factory
 from .lvae.losses import denoisplit_loss, denoisplit_musplit_loss, musplit_loss
-from .mutual_info import mutual_information
+from .mutual_info import mutual_information, pairwise_mutual_information
