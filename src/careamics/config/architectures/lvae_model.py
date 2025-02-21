@@ -1,6 +1,5 @@
 """LVAE Pydantic model."""
-
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
@@ -51,8 +50,8 @@ class LVAEModel(ArchitectureModel):
     """Whether the reference spectra matrix is learnable."""
     num_bins: int = Field(default=32)
     """Number of bins for the spectral data."""
-    clip_unmixed: bool = True
-    """Whether to clip negative values in the unmixed spectra to 0."""
+    unmixed_clipping: Optional[Literal["zero", "adaptive"]] = None
+    """Clipping method for unmixed images in λSplit."""
     mixer_num_frozen_epochs: int = Field(default=0)
     """Number of epochs before starting to learn the spectra reference matrix."""
     

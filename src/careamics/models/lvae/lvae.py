@@ -6,7 +6,7 @@ and Artefact Removal, Prakash et al."
 """
 
 from collections.abc import Iterable
-from typing import Literal, Sequence, Union
+from typing import Literal, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -91,7 +91,7 @@ class LadderVAE(nn.Module):
         analytical_kl: bool,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
-        unmixed_clipping: Literal["zero", "adaptive"],
+        unmixed_clipping: Optional[Literal["zero", "adaptive"]] = None,
         ref_learnable: bool = False,
         num_bins: int = 1,
         mixer_num_frozen_epochs: int = 0,
@@ -128,11 +128,11 @@ class LadderVAE(nn.Module):
         self.in_channels = num_bins
         self.mixer_num_frozen_epochs = mixer_num_frozen_epochs
         self.unmixed_clipping = unmixed_clipping
-        if self.unmixed_clipping == "adaptive_clipping":
-            self.adaptive_clip_values = nn.Parameter(
-                torch.zeros(self.in_channels, dtype=torch.float32),
-                requires_grad=True
-            )
+        if self.unmixed_clipping == "adaptive":
+            values = torch.zeros(
+                len(self.fluorophores), dtype=torch.float32
+            ).reshape((1, len(self.fluorophores)) + (1,) * len(self.image_size))
+            self.adaptive_clip_values = nn.Parameter(values, requires_grad=True)
         # -------------------------------------------------------
         
 
@@ -782,12 +782,12 @@ class LadderVAE(nn.Module):
         out = self.output_layer(out)
         
         # Post-processing of unmixed images
-        axes = (1,) + (1,) * len(self.image_size)
-        if self.unmixed_clipping == "zero_clipping":
+        axes = (0,) + tuple(np.arange(2, len(out.shape)))
+        if self.unmixed_clipping == "zero":
             out = torch.clamp(out, min=0.0)
-        elif self.unmixed_clipping == "adaptive_clipping":
-            out = out - out.min(dim=axes, keepdim=True)
-            out = torch.clip(out, min=self.adaptive_clip_values)
+        elif self.unmixed_clipping == "adaptive":
+            out = out - torch.amin(out, dim=axes, keepdim=True)
+            out = torch.clamp(out, min=self.adaptive_clip_values)
         
         # Re-mixing
         remixed = self.mixer(out)
