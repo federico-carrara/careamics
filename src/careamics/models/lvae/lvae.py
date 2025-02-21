@@ -6,7 +6,7 @@ and Artefact Removal, Prakash et al."
 """
 
 from collections.abc import Iterable
-from typing import Literal, Sequence, Tuple, Union
+from typing import Literal, Sequence, Union
 
 import numpy as np
 import torch
@@ -91,9 +91,9 @@ class LadderVAE(nn.Module):
         analytical_kl: bool,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
+        unmixed_clipping: Literal["zero", "adaptive"],
         ref_learnable: bool = False,
         num_bins: int = 1,
-        clip_unmixed: bool = True,
         mixer_num_frozen_epochs: int = 0,
         **kwargs
     ):
@@ -126,8 +126,13 @@ class LadderVAE(nn.Module):
         self.wv_range = wv_range
         self.ref_learnable = ref_learnable
         self.in_channels = num_bins
-        self.clip_unmixed = clip_unmixed
         self.mixer_num_frozen_epochs = mixer_num_frozen_epochs
+        self.unmixed_clipping = unmixed_clipping
+        if self.unmixed_clipping == "adaptive_clipping":
+            self.adaptive_clip_values = nn.Parameter(
+                torch.zeros(self.in_channels, dtype=torch.float32),
+                requires_grad=True
+            )
         # -------------------------------------------------------
         
 
@@ -776,9 +781,13 @@ class LadderVAE(nn.Module):
         out, td_data = self.topdown_pass(bu_values)
         out = self.output_layer(out)
         
-        # Clip output to 0
-        if self.clip_unmixed:
+        # Post-processing of unmixed images
+        axes = (1,) + (1,) * len(self.image_size)
+        if self.unmixed_clipping == "zero_clipping":
             out = torch.clamp(out, min=0.0)
+        elif self.unmixed_clipping == "adaptive_clipping":
+            out = out - out.min(dim=axes, keepdim=True)
+            out = torch.clip(out, min=self.adaptive_clip_values)
         
         # Re-mixing
         remixed = self.mixer(out)
