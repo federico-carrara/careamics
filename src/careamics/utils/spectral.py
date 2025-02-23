@@ -2,7 +2,7 @@
 
 import warnings
 from functools import cached_property
-from typing import Optional, Sequence, Union
+from typing import Literal, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -306,41 +306,38 @@ class FPRefMatrix(BaseModel):
         
         self.matrix = torch.stack([intensity for intensity in intensities], axis=1)
         return self.matrix
-        
-    def add_background_spectrum(
-        self, 
+
+    def _get_spectrum_from_image(
+        self,
         image: Union[np.ndarray, torch.Tensor],
         coords: tuple[int, ...],
         n_pixels: int = 5
     ) -> torch.Tensor:
-        """Add a background spectrum taken from an image to the reference matrix.
+        """Get spectrum taken from a patch of an image.
         
         Parameters
         ----------
         image : Union[np.ndarray, torch.Tensor]
-            The image from which to extract the background spectrum. 
+            The image from which to extract spectrum. 
             Shape should be (C, [Z], Y, X).
         coords : tuple[int, ...]
-            The coordinates of the background spectrum in the image, in the form 
+            The coordinates of the spectrum to extract from the image, in the form 
             ([Z], Y, X). A square region of size [`2*n_pixels`x`2*n_pixels`] centered
-            at (Y, X) is considered to extract the background spectrum.
+            at (Y, X) is used to compute the spectrum.
         n_pixels : int
-            The size of the square region around the coordinates to consider for the
-            background spectrum. Default is 5.
+            The size of the square region around the coordinates at which the
+            spectrum is extracted. Default is 5.
         
         Returns
         -------
         torch.Tensor
-            The updated reference matrix.
+            The obtained spectrum.
         """
         spatial_ndims = image.ndim - 1
         assert spatial_ndims in [2, 3], "Image must either 2D or 3D!"
         assert len(coords) == spatial_ndims, (
             f"Coordinates should be as many as the image spatial dimensions! "
             f"Got instead {len(coords)} coordinates for image of shape {image.shape}."
-        )
-        assert self.matrix.shape[1] <= len(self.fp_names), (
-            "Background spectrum already added!"
         )
         
         # extract background spectrum
@@ -361,6 +358,62 @@ class FPRefMatrix(BaseModel):
         )
         
         # normalize background spectrum
+        return bg_spectrum_intensity
+        
+    def add_background_spectrum(
+        self,
+        method: Literal["random", "constant", "from_image"],
+        image: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        coords: Optional[tuple[int, ...]] = None,
+        n_pixels: int = 5
+    ) -> torch.Tensor:
+        """Add a (background) spectrum to the reference matrix.
+        
+        If `image` is provided, the background spectrum is extracted from the image
+        at the given coordinates. Otherwise, the background spectrum is randomly
+        initialized from a uniform distribution or set to a constant value.
+        
+        Parameters
+        ----------
+        image : Optional[Union[np.ndarray, torch.Tensor]]
+            The image from which to extract the background spectrum. 
+            Shape should be (C, [Z], Y, X).Default is None.
+        coords : Opional[tuple[int, ...]]
+            The coordinates of the spectrum to extract from the image, in the form 
+            ([Z], Y, X). A square region of size [`2*n_pixels`x`2*n_pixels`] centered
+            at (Y, X) is used to compute the spectrum. Default is None.
+        n_pixels : int
+            The size of the square region around the coordinates at which the
+            spectrum is extracted. Default is 5.
+        
+        Returns
+        -------
+        torch.Tensor
+            The updated reference matrix.
+        """
+        assert self.matrix.shape[1] <= len(self.fp_names), (
+            "Background spectrum already added!"
+        )
+        if method == "from image":
+            assert image is not None, "Image must be provided to extract background spectrum!"
+            assert coords is not None, "Coordinates must be provided to extract background spectrum!"
+        
+        # get background spectrum
+        if method == "from_image":
+            bg_spectrum_intensity = self._get_spectrum_from_image(
+                image, coords, n_pixels
+            )
+        elif method == "random":
+            bg_spectrum_intensity = torch.rand(self.n_bins)
+        elif method == "constant":
+            bg_spectrum_intensity = torch.ones(self.n_bins)
+        else:
+            raise ValueError(
+                f"Unknown method {method} for adding background spectrum!"
+                "Choose from 'random', 'constant', 'from_image'."
+            )
+        
+        # normalize intensity
         bg_spectrum_intensity = self._normalize(bg_spectrum_intensity)
         
         # add background spectrum to the reference matrix
