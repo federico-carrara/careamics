@@ -73,7 +73,7 @@ class SpectralMixer(nn.Module):
             ref_matrix = matrix.add_background_spectrum(
                 self.add_background, **self.bg_kwargs
             )
-        self.ref_matrix = nn.Parameter(ref_matrix)
+        self.ref_matrix = nn.Parameter(ref_matrix, requires_grad=False)
         
         # set "learnability"
         if self.ref_learnable and self.num_frozen_epochs == 0:
@@ -81,8 +81,6 @@ class SpectralMixer(nn.Module):
             # background spectrum learnt no matter what
         elif self.bg_learnable:
             self.ref_matrix[:, -1].requires_grad = True
-        else:
-            self.ref_matrix.requires_grad = False
     
     def update_learnability(self, curr_epoch: int) -> None:
         """Update the reference matrix learnability.
