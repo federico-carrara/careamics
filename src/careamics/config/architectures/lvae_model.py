@@ -274,4 +274,7 @@ class LVAEModel(ArchitectureModel):
                     raise ValueError(
                         "`coords` must be provided in the background kwargs."
                     )
+        else:
+            if self.bg_kwargs is None:
+                self.bg_kwargs = {}
         return self
