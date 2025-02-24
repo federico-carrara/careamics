@@ -375,6 +375,8 @@ class FPRefMatrix(BaseModel):
         
         Parameters
         ----------
+        method : Literal["random", "constant", "from_image"]
+            The method to use for adding the background spectrum.
         image : Optional[Union[np.ndarray, torch.Tensor]]
             The image from which to extract the background spectrum. 
             Shape should be (C, [Z], Y, X).Default is None.
