@@ -6,7 +6,7 @@ and Artefact Removal, Prakash et al."
 """
 
 from collections.abc import Iterable
-from typing import Literal, Sequence, Tuple, Union
+from typing import Literal, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -91,10 +91,13 @@ class LadderVAE(nn.Module):
         analytical_kl: bool,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
+        num_bins: int,
         ref_learnable: bool = False,
-        num_bins: int = 1,
-        clip_unmixed: bool = True,
         mixer_num_frozen_epochs: int = 0,
+        clip_unmixed: bool = False,
+        add_background: Optional[Literal["random", "constant", "from_image"]] = None,
+        bg_learnable: bool = False,
+        bg_kwargs: Optional[dict] = None,
         **kwargs
     ):
         """Constructor."""
@@ -128,6 +131,9 @@ class LadderVAE(nn.Module):
         self.in_channels = num_bins
         self.clip_unmixed = clip_unmixed
         self.mixer_num_frozen_epochs = mixer_num_frozen_epochs
+        self.add_background = add_background
+        self.bg_learnable = bg_learnable
+        self.bg_kwargs = bg_kwargs
         # -------------------------------------------------------
         
 
@@ -260,6 +266,9 @@ class LadderVAE(nn.Module):
                 ref_learnable=self.ref_learnable,
                 num_bins=self.in_channels,
                 num_frozen_epochs=self.mixer_num_frozen_epochs,
+                add_background=self.add_background,
+                bg_learnable=self.bg_learnable,
+                bg_kwargs=self.bg_kwargs,
             )
         else:
             self.mixer = nn.Identity()

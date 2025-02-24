@@ -1,6 +1,6 @@
 """LVAE Pydantic model."""
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
@@ -47,14 +47,20 @@ class LVAEModel(ArchitectureModel):
     """A list of the fluorophore names in the image to unmix."""
     wv_range: tuple[int, int] = Field(default=(400, 700))
     """The wavelength range of the spectral image."""
-    ref_learnable: bool = Field(default=False)
-    """Whether the reference spectra matrix is learnable."""
-    num_bins: int = Field(default=32)
+    num_bins: int = 32
     """Number of bins for the spectral data."""
     clip_unmixed: bool = False
     """Whether to clip negative values in the unmixed spectra to 0."""
-    mixer_num_frozen_epochs: int = Field(default=0)
+    ref_learnable: bool = False
+    """Whether the reference spectra matrix is learnable."""
+    mixer_num_frozen_epochs: int = 0
     """Number of epochs before starting to learn the spectra reference matrix."""
+    add_background: Optional[Literal["random", "constant", "from_image"]] = None
+    """Whether and how to add a background spectrum to the reference matrix."""
+    bg_learnable: bool = False
+    """Whether the background spectrum is learnable."""
+    bg_kwargs: Optional[dict] = None
+    """Additional keyword arguments for the background spectrum."""
     
     @model_validator(mode="after")
     def validate_conv_strides(self: Self) -> Self:
@@ -241,4 +247,31 @@ class LVAEModel(ArchitectureModel):
                 f"Multiscale count must be 1 for LC off or less or equal to the number"
                 f" of Z dims + 1 (got {self.multiscale_count} and {len(self.z_dims)})."
             )
+        return self
+    
+    @model_validator(mode="after")
+    def _validate_background_args(self: Self) -> Self:
+        """
+        Validate the background arguments.
+
+        Returns
+        -------
+        Self
+            The validated model.
+        """
+        if self.add_background == "from_image":
+            if self.bg_kwargs is None:
+                raise ValueError(
+                    "Background kwargs must be provided if background spectrum needs"
+                    "to be extracted from the image."
+                )
+            else:
+                if "image" not in self.bg_kwargs:
+                    raise ValueError(
+                        "`image` must be provided in the background kwargs."
+                    )
+                if "coords" not in self.bg_kwargs:
+                    raise ValueError(
+                        "`coords` must be provided in the background kwargs."
+                    )
         return self
