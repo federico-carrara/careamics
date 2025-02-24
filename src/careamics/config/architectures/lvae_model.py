@@ -51,7 +51,7 @@ class LVAEModel(ArchitectureModel):
     """Whether the reference spectra matrix is learnable."""
     num_bins: int = Field(default=32)
     """Number of bins for the spectral data."""
-    clip_unmixed: bool = True
+    clip_unmixed: bool = False
     """Whether to clip negative values in the unmixed spectra to 0."""
     mixer_num_frozen_epochs: int = Field(default=0)
     """Number of epochs before starting to learn the spectra reference matrix."""
