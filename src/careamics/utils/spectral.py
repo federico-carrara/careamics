@@ -12,6 +12,31 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from .fpbase import get_fp_emission_spectrum
 
 
+def _get_bins(num_bins: int, interval: Sequence[int],) -> torch.Tensor:
+    """Get bin delimiters for the given interval.
+    
+    Parameters
+    ----------
+    num_bins : int
+        The number of bins to create.
+    interval : Sequence[int, int]
+        The interval to create the bins for.
+    
+    Returns
+    -------
+    torch.Tensor
+        The bin delimiters.
+    """
+    range_ = interval[1] - interval[0]
+    min_bin_length = range_ // num_bins
+    remainder = range_ % num_bins
+    bins = [interval[0]]
+    for i in range(num_bins):
+        # add extra wavelengths (reminder) at the beginning
+        curr_bin_length = min_bin_length if i >= remainder else min_bin_length + 1
+        bins.append(bins[-1] + curr_bin_length)
+    return torch.tensor(bins)
+
 class Spectrum(BaseModel):
     """A Spectrum object defined by its intensity and wavelengths.
     
@@ -107,31 +132,6 @@ class Spectrum(BaseModel):
 
         return new_intensity
 
-    def _get_bins(self, num_bins: int, interval: Sequence[int],) -> torch.Tensor:
-        """Get bin delimiters for the given interval.
-        
-        Parameters
-        ----------
-        num_bins : int
-            The number of bins to create.
-        interval : Sequence[int, int]
-            The interval to create the bins for.
-        
-        Returns
-        -------
-        torch.Tensor
-            The bin delimiters.
-        """
-        range_ = interval[1] - interval[0]
-        min_bin_length = range_ // num_bins
-        remainder = range_ % num_bins
-        bins = [interval[0]]
-        for i in range(num_bins):
-            # add extra wavelengths (reminder) at the beginning
-            curr_bin_length = min_bin_length if i >= remainder else min_bin_length + 1
-            bins.append(bins[-1] + curr_bin_length)
-        return torch.tensor(bins)
-
     def bin_intensity(
         self, num_bins: int, interval: Optional[Sequence[int]] = None
     ) -> torch.Tensor:
@@ -155,7 +155,7 @@ class Spectrum(BaseModel):
             interval = (self.wavelength.min(), self.wavelength.max())
         
         # initialize
-        bin_edges = self._get_bins(
+        bin_edges = _get_bins(
             num_bins=num_bins,
             interval=interval,
         )
@@ -465,9 +465,20 @@ class FPRefMatrix(BaseModel):
         self.matrix = torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
         return self.matrix
     
-    def plot(self, **kwargs):
-        """Plot the reference matrix."""
+    def plot(self, show_wavelengths: bool = True) -> None:
+        """Plot the reference matrix.
+        
+        Parameters
+        ----------
+        show_wavelengths : bool
+            Whether to show the wavelength values on the x-axis. Default is False.
+        """
         assert hasattr(self, "matrix"), "Reference matrix not created yet!"
+        if show_wavelengths:
+            assert self.interval is not None, "Wavelength interval not provided!"
+            bins = _get_bins(self.n_bins, self.interval)
+            bins = np.asarray(bins)
+            bin_centers = (bins[:-1] + bins[1:]) / 2
         
         import matplotlib.pyplot as plt
         
@@ -478,5 +489,7 @@ class FPRefMatrix(BaseModel):
         ax.set_xlabel("Wavelength bins")
         ax.set_ylabel("Normalized intensity")
         ax.set_title("Reference FP spectra")
+        ax.set_xticks(range(self.n_bins))
+        ax.set_xticklabels(bin_centers.astype(int), rotation=45)
         ax.legend()
         plt.show()
