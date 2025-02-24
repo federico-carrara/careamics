@@ -250,6 +250,34 @@ class LVAEModel(ArchitectureModel):
         return self
     
     @model_validator(mode="after")
+    def _validate_output_channels(self: Self) -> Self:
+        """
+        Validate the output channels.
+
+        Returns
+        -------
+        Self
+            The validated model.
+        """
+        if self.training_mode == "unsupervised":
+            if self.fluorophores:
+                if self.add_background:
+                    if self.output_channels != len(self.fluorophores) + 1:
+                        raise ValueError(
+                            f"Output channels must be equal to the number of "
+                            "fluorophores plus one for the background (got "
+                            f"{self.output_channels} and {len(self.fluorophores)})."
+                        )
+                else:
+                    if self.output_channels != len(self.fluorophores):
+                        raise ValueError(
+                            f"Output channels must be equal to the number of "
+                            f"fluorophores (got {self.output_channels} and "
+                            f"{len(self.fluorophores)})."
+                        )
+        return self
+    
+    @model_validator(mode="after")
     def _validate_background_args(self: Self) -> Self:
         """
         Validate the background arguments.
