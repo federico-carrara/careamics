@@ -6,6 +6,7 @@ from typing import Literal, Optional, Sequence, Union
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from .fpbase import get_fp_emission_spectrum
@@ -200,6 +201,48 @@ class FPRefMatrix(BaseModel):
     
     matrix: Optional[torch.Tensor] = None
     """The reference matrix containing the fluorophore emission spectra."""
+    
+    @classmethod
+    def from_array(
+        cls,
+        matrix: NDArray,
+        fp_names: Sequence[str],
+        n_bins: int,
+        interval: Sequence[int],
+        background: bool = False,
+    ) -> "FPRefMatrix":
+        """Create a reference matrix from an array of fluorophore emission spectra.
+        
+        Parameters
+        ----------
+        matrix : NDArray
+            The array containing the fluorophore emission spectra, of shape [W, F].
+        fp_names : Sequence[str]
+            The names of the fluorophores.
+        n_bins : int
+            The number of wavelength bins to use for the FP spectra.
+        interval : Sequence[int]
+            The interval of wavelengths in which binning is done. Wavelengths outside
+            this interval are ignored.
+        background : bool
+            Whether the array contains a background spectrum. Default is False.
+        """
+        F = matrix.shape[1]
+        if background:
+            assert F == len(fp_names) + 1, (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+        else:
+            assert F == len(fp_names), (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+
+        return cls(
+            fp_names=fp_names,
+            n_bins=n_bins,
+            interval=interval,
+            matrix=torch.tensor(matrix),
+        )
     
     def _fetch_fp_spectra(self) -> list[Spectrum]:
         """Fetch the fluorophore emission spectra from FPbase."""
