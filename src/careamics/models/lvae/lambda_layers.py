@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Literal, Optional, Sequence
 
 import torch
 import torch.nn as nn
@@ -20,9 +20,12 @@ class SpectralMixer(nn.Module):
         self,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
-        ref_learnable: bool = False,
         num_bins: int = 32,
+        ref_learnable: bool = False,
         num_frozen_epochs: int = 0,
+        add_background: Optional[Literal["random", "constant", "from_image"]] = None,
+        bg_learnable: bool = False,
+        bg_kwargs: Optional[dict] = None,
     ):
         """
         Parameters
@@ -31,20 +34,33 @@ class SpectralMixer(nn.Module):
             A sequence of fluorophore names.
         wv_range : Sequence[int]
             The wavelength range of the spectral image.
-        ref_learnable : bool, optional
-            Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
+        ref_learnable : bool, optional
+            Whether to make the reference matrix learnable. Default is `False`.
         num_frozen_epochs : int, optional
             The number of epochs before starting learning the reference matrix.
             Default is 0.
+        add_background : Literal["random", "constant", "from_image"], optional
+            Whether and how to add a background spectrum to the reference matrix.
+            Specifically, "random" adds a background spectrum drawn from a uniform
+            distribution, "constant" adds a constant background spectrum, and
+            "from_image" adds a background spectrum extracted from an image. For more
+            information, see `FPRefMatrix.add_background_spectrum`. Default is None.
+        bg_learnable : bool, optional
+            Whether to make the background spectrum learnable. Default is `False`.
+        bg_kwargs : dict, optional
+            Additional keyword arguments for the background spectrum. Default is None.
         """
         super().__init__()
         self.fluorophores = fluorophores
         self.wv_range = wv_range
-        self.ref_learnable = ref_learnable
         self.num_bins = num_bins
+        self.ref_learnable = ref_learnable
         self.num_frozen_epochs = num_frozen_epochs
+        self.add_background = add_background
+        self.bg_learnable = bg_learnable
+        self.bg_kwargs = bg_kwargs
         
         # get the reference matrix from FPBase
         matrix = FPRefMatrix(
@@ -52,10 +68,21 @@ class SpectralMixer(nn.Module):
             n_bins=self.num_bins,
             interval=self.wv_range
         )
-        self.ref_matrix = nn.Parameter(
-            matrix.create(), 
-            requires_grad=self.ref_learnable and self.num_frozen_epochs == 0
-        )
+        ref_matrix = matrix.create()
+        if self.add_background is not None:
+            ref_matrix = matrix.add_background_spectrum(
+                self.add_background, **self.bg_kwargs
+            )
+        self.ref_matrix = nn.Parameter(ref_matrix)
+        
+        # set "learnability"
+        if self.ref_learnable and self.num_frozen_epochs == 0:
+            self.ref_matrix.requires_grad = True
+            # background spectrum learnt no matter what
+        elif self.bg_learnable:
+            self.ref_matrix[:, -1].requires_grad = True
+        else:
+            self.ref_matrix.requires_grad = False
     
     def update_learnability(self, curr_epoch: int) -> None:
         """Update the reference matrix learnability.
