@@ -69,18 +69,19 @@ class SpectralMixer(nn.Module):
             interval=self.wv_range
         )
         ref_matrix = matrix.create()
+        self.ref_matrix = nn.Parameter(
+            ref_matrix,
+            requires_grad=self.ref_learnable and self.num_frozen_epochs == 0
+        )
+        
+        # add background spectrum
         if self.add_background is not None:
             ref_matrix = matrix.add_background_spectrum(
                 self.add_background, **self.bg_kwargs
             )
-        self.ref_matrix = nn.Parameter(ref_matrix, requires_grad=False)
-        
-        # set "learnability"
-        if self.ref_learnable and self.num_frozen_epochs == 0:
-            self.ref_matrix.requires_grad = True
-            # background spectrum learnt no matter what
-        elif self.bg_learnable:
-            self.ref_matrix[:, -1].requires_grad = True
+            self.bg_spectrum = nn.Parameter(
+                ref_matrix[:, -1], requires_grad=self.bg_learnable
+            )
     
     def update_learnability(self, curr_epoch: int) -> None:
         """Update the reference matrix learnability.
@@ -103,8 +104,8 @@ class SpectralMixer(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            The unmixed images. Shape is (B, F, [Z], Y, X), where F is the number of
-            fluorophores to unmix.
+            The unmixed images. Shape is (B, F + 1, [Z], Y, X), where F is the number of
+            fluorophores to unmix, and the last channel is the background channel.
         
         Returns
         -------
@@ -112,7 +113,20 @@ class SpectralMixer(nn.Module):
             The mixed spectral image. Shape is (B, W, [Z], Y, X), where W is the number
             of spectral channels.
         """
-        B, F, *spatial = x.shape 
-        return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, *spatial)
+        B, F, *spatial = x.shape
+        if self.add_background is not None:
+            F -= 1
+
+        spectral_img_fp = torch.matmul(
+            self.ref_matrix, x[:, :F, ...].view(B, F, -1)
+        ).view(B, -1, *spatial)
+        
+        spectral_img_bg = 0
+        if self.add_background is not None:
+            spectral_img_bg = (
+                self.bg_spectrum[None, :, None] * x[:, -1].view(B, 1, -1)
+            ).view(B, -1, *spatial)
+        
+        return spectral_img_fp + spectral_img_bg
     
 
