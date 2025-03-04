@@ -113,6 +113,7 @@ class SpectralMixer(nn.Module):
             The mixed spectral image. Shape is (B, W, [Z], Y, X), where W is the number
             of spectral channels.
         """
+        # TODO: quite messy, refactor
         B, F, *spatial = x.shape
         if self.add_background is not None:
             F -= 1
