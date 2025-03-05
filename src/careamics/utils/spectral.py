@@ -1,6 +1,7 @@
 """Utility functions for working with spectral data."""
 import warnings
 from typing import Optional, Sequence, Union
+from typing_extensions import Self
 
 import numpy as np
 import torch
@@ -218,7 +219,7 @@ class FPRefMatrix(BaseModel):
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
     
-    interval: Optional[Sequence[int]] = None
+    interval: Optional[tuple[int, int]] = None
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
     
@@ -228,6 +229,20 @@ class FPRefMatrix(BaseModel):
     
     data: Optional[torch.Tensor] = None
     """The data array containing the fluorophore emission spectra."""
+    
+    @field_validator("interval")
+    def _validate_interval(cls, value: Optional[Sequence[int]]) -> Optional[Sequence[int]]:
+        if value is not None:
+            assert value[0] < value[1], "Invalid interval provided!"
+        return value
+    
+    @model_validator(mode="after")
+    def _validate_shifts(self: Self) -> Self:
+        if self.shifts is not None:
+            assert len(self.shifts) == len(self.fp_names), (
+                "Number of shifts must match the number of fluorophores!"
+            )
+        return self
     
     @classmethod
     def from_array(
