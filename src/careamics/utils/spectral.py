@@ -1,11 +1,10 @@
 """Utility functions for working with spectral data."""
-
 import warnings
-from functools import cached_property
 from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from .fpbase import get_fp_emission_spectrum
@@ -199,8 +198,50 @@ class FPRefMatrix(BaseModel):
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
     
-    matrix: Optional[torch.Tensor] = None
-    """The reference matrix containing the fluorophore emission spectra."""
+    data: Optional[torch.Tensor] = None
+    """The data array containing the fluorophore emission spectra."""
+    
+    @classmethod
+    def from_array(
+        cls,
+        matrix: Union[NDArray, torch.Tensor],
+        fp_names: Sequence[str],
+        n_bins: int,
+        interval: Sequence[int],
+        background: bool = False,
+    ) -> "FPRefMatrix":
+        """Create a reference matrix from an array of fluorophore emission spectra.
+        
+        Parameters
+        ----------
+        matrix : Union[NDArray, torch.Tensor]
+            The array containing the fluorophore emission spectra, of shape [W, F].
+        fp_names : Sequence[str]
+            The names of the fluorophores.
+        n_bins : int
+            The number of wavelength bins to use for the FP spectra.
+        interval : Sequence[int]
+            The interval of wavelengths in which binning is done. Wavelengths outside
+            this interval are ignored.
+        background : bool
+            Whether the array contains a background spectrum. Default is False.
+        """
+        F = matrix.shape[1]
+        if background:
+            assert F == len(fp_names) + 1, (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+        else:
+            assert F == len(fp_names), (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+
+        return cls(
+            fp_names=fp_names,
+            n_bins=n_bins,
+            interval=interval,
+            data=torch.tensor(matrix),
+        )
     
     def _fetch_fp_spectra(self) -> list[Spectrum]:
         """Fetch the fluorophore emission spectra from FPbase."""
@@ -294,6 +335,11 @@ class FPRefMatrix(BaseModel):
         torch.Tensor
             The reference matrix.
         """
+        # check if data is already created
+        if self.data is not None:
+            print("Reference matrix already created. Returning the existing one.")
+            return self.data
+        
         self.fp_spectra = self._get_fp_spectra()
         
         # get the intensities of each fluorophore spectrum
@@ -306,8 +352,8 @@ class FPRefMatrix(BaseModel):
         if normalize:
             intensities = [self._normalize(intensity) for intensity in intensities]
         
-        self.matrix = torch.stack([intensity for intensity in intensities], axis=1)
-        return self.matrix
+        self.data = torch.stack([intensity for intensity in intensities], axis=1)
+        return self.data
         
     def add_background_spectrum(
         self, 
@@ -341,7 +387,7 @@ class FPRefMatrix(BaseModel):
             f"Coordinates should be as many as the image spatial dimensions! "
             f"Got instead {len(coords)} coordinates for image of shape {image.shape}."
         )
-        assert self.matrix.shape[1] <= len(self.fp_names), (
+        assert self.data.shape[1] <= len(self.fp_names), (
             "Background spectrum already added!"
         )
         
@@ -366,8 +412,8 @@ class FPRefMatrix(BaseModel):
         bg_spectrum_intensity = self._normalize(bg_spectrum_intensity)
         
         # add background spectrum to the reference matrix
-        self.matrix = torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
-        return self.matrix
+        self.data = torch.cat([self.data, bg_spectrum_intensity.unsqueeze(1)], axis=1)
+        return self.data
     
     def plot(self, show_wavelengths: bool = True) -> None:
         """Plot the reference matrix.
@@ -388,8 +434,8 @@ class FPRefMatrix(BaseModel):
 
         fig, ax = plt.subplots(figsize=(10, 5))
         labels = list(self.fp_names) + ["background"]
-        for i in range(self.matrix.shape[1]):
-            ax.plot(self.matrix[:, i], label=labels[i])
+        for i in range(self.data.shape[1]):
+            ax.plot(self.data[:, i], label=labels[i])
         ax.set_xlabel("Wavelength bins")
         ax.set_ylabel("Normalized intensity")
         ax.set_title("Reference FP spectra")
