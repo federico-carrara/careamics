@@ -136,7 +136,7 @@ class Spectrum(BaseModel):
         self,
         num_bins: int,
         interval: Optional[Sequence[int]] = None,
-        interp_factor: int = 10
+        interpolate: bool = True
     ) -> torch.Tensor:
         """Bins the intensity values according to the provided bins for the wavelength.
         
@@ -148,9 +148,9 @@ class Spectrum(BaseModel):
             Interval of wavelengths in which binning is done. Wavelengths outside this
             interval are ignored. If `None`, the interval is set to the range of the
             wavelength. Default is `None`.
-        interp_factor: int
-            The factor by which to interpolate the intensity values in order to get a
-            finer grid and, hence, a more accurate binning. Default is 10.
+        interpolate: bool
+            Whether to interpolate the intensity values onto a finer grid of
+            wavelengths to get a more accurate binning. Default is `True`.
 
         Returns
         -------
@@ -161,10 +161,16 @@ class Spectrum(BaseModel):
             interval = (self.wavelength.min(), self.wavelength.max())
         
         # interpolate the intensity values
-        finer_wavelength = torch.linspace(
-            interval[0], interval[1], interp_factor * len(self.wavelength)
-        )
-        finer_intensity = np.interp(finer_wavelength, self.wavelength, self.intensity)
+        if interpolate:
+            interp_factor = 10 * num_bins // (interval[1] - interval[0])
+            print(interp_factor)
+            wavelength = torch.linspace(
+                interval[0], interval[1], interp_factor * len(self.wavelength)
+            )
+            intensity = np.interp(wavelength, self.wavelength, self.intensity)
+        else:
+            wavelength = self.wavelength
+            intensity = self.intensity
         
         # get the bin edges
         bin_edges = _get_bins(
@@ -175,13 +181,13 @@ class Spectrum(BaseModel):
 
         # digitize the wavelength tensor into bin indices
         bin_indices = torch.bucketize(
-            finer_wavelength.contiguous(), bin_edges, right=False
+            wavelength.contiguous(), bin_edges, right=False
         )
 
         # perform the binning
         for i in range(1, len(bin_edges)):
             mask = bin_indices == i
-            binned_intensity[i - 1] = finer_intensity[mask].sum()
+            binned_intensity[i - 1] = intensity[mask].sum()
             
         return binned_intensity
 
