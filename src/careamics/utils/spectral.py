@@ -43,8 +43,7 @@ class Spectrum(BaseModel):
     """
 
     model_config = ConfigDict(
-        validate_assignment=True,
-        arbitrary_types_allowed=True,
+        validate_assignment=True, arbitrary_types_allowed=True,
     )
 
     wavelength: torch.Tensor
@@ -186,7 +185,11 @@ class FPRefMatrix(BaseModel):
     >>> ref_matrix.create()
     """
     
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="allow",
+    )
 
     fp_names: Sequence[str]
     """The names of the fluorophores to include in the reference matrix."""
@@ -423,7 +426,8 @@ class FPRefMatrix(BaseModel):
         show_wavelengths : bool
             Whether to show the wavelength values on the x-axis. Default is False.
         """
-        assert hasattr(self, "matrix"), "Reference matrix not created yet!"
+        assert hasattr(self, "data"), "Reference matrix not created yet!"
+        
         if show_wavelengths:
             assert self.interval is not None, "Wavelength interval not provided!"
             bins = _get_bins(self.n_bins, self.interval)
