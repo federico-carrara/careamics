@@ -89,5 +89,3 @@ class SpectralMixer(nn.Module):
         """
         B, F, *spatial = x.shape 
         return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, *spatial)
-    
-
