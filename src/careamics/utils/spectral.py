@@ -162,8 +162,7 @@ class Spectrum(BaseModel):
         
         # interpolate the intensity values
         if interpolate:
-            interp_factor = 10 * num_bins // (interval[1] - interval[0])
-            print(interp_factor)
+            interp_factor = 100 * num_bins // (interval[1] - interval[0])
             wavelength = torch.linspace(
                 interval[0], interval[1], interp_factor * len(self.wavelength)
             )
