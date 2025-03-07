@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class KLLossConfig(BaseModel):
@@ -26,6 +26,34 @@ class KLLossConfig(BaseModel):
     """Number of epochs for which KL loss annealing is applied."""
     current_epoch: int = 0 # TODO: done by lightning, remove (?)
     """Current epoch in the training loop."""
+    
+
+class MutualInfoLossConfig(BaseModel):
+    """Mutual information loss configuration."""
+
+    model_config = ConfigDict(validate_assignment=True, validate_default=True)
+
+    loss_type: Literal["hist", "MINE"]
+    """Type of mutual information implementation, either using histograms to estimate
+    joint and marginal distributions of input data or using MINE algorithm."""
+    num_bins: int = 100
+    """Number of bins for the histogram approximating input distribution."""
+    binning_method: Literal["gaussian", "sigmoid"]
+    """Methods for differentiable binning in the histogram approach."""
+    gaussian_sigma: float = 0.5
+    """The standard deviation of the Gaussian kernel. A value in (0, 1] is
+    recommended to get sharp binning functions."""
+    sigmoid_scale: float = 10.0
+    """The scaling factor of the sigmoid kernel. A value greater than 10 is
+    recommended to get sharp binning functions."""
+    epsilon: float = 1e-10  
+    """Small value to ensure numerical stability."""
+    
+    @field_validator("loss_type")
+    def validate_loss_type(cls, v):
+        if v == "MINE":
+            raise NotImplementedError("MINE mutual info loss not yet implemented")
+        return v
 
 
 class LVAELossConfig(BaseModel):
@@ -50,6 +78,12 @@ class LVAELossConfig(BaseModel):
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
     kl_params: KLLossConfig = KLLossConfig()
     """KL loss configuration."""
+    enable_mutual_info: bool = False
+    """Whether to enable mutual information loss."""
+    mutual_info_weight: float = 1.0
+    """Weight for the mutual information loss."""
+    mutual_info_params: MutualInfoLossConfig = MutualInfoLossConfig()
+    """Mutual information loss configuration."""
 
     # TODO: remove?
     non_stochastic: bool = False
