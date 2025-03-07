@@ -33,12 +33,12 @@ class MutualInfoLossConfig(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
-    loss_type: Literal["hist", "MINE"]
+    loss_type: Literal["hist", "MINE"] = "hist"
     """Type of mutual information implementation, either using histograms to estimate
     joint and marginal distributions of input data or using MINE algorithm."""
     num_bins: int = 100
     """Number of bins for the histogram approximating input distribution."""
-    binning_method: Literal["gaussian", "sigmoid"]
+    binning_method: Literal["gaussian", "sigmoid"] = "sigmoid"
     """Methods for differentiable binning in the histogram approach."""
     gaussian_sigma: float = 0.5
     """The standard deviation of the Gaussian kernel. A value in (0, 1] is

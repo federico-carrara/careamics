@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import torch
 
-from careamics.losses import pairwise_mutual_information
+from careamics.losses.mutual_info import pairwise_mutual_information
 from careamics.losses.lvae.loss_utils import free_bits_kl, get_kl_weight
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
@@ -305,9 +305,10 @@ def get_mutual_info_loss(
     else:
         raise NotImplementedError("MINE mutual info loss not yet implemented")
 
-    # TODO: aggregate the different results
+    # average over batch dimension
+    mutual_info_loss = mutual_info_loss.mean(dim=0)
     
-    return torch.tensor(mutual_info_loss, device=inputs.device)
+    return mutual_info_loss.to(inputs.device)
 
 # TODO: @melisande-c suggested to refactor this as a class (see PR #208)
 # - loss computation happens by calling the `__call__` method
