@@ -334,14 +334,14 @@ def mutual_information(
     return _compute_mutual_info(marginal_pdf1, marginal_pdf2, joint_pdf)
     #TODO: implement normalized mutual information
 
-
+# TODO: check if it works for a batch of elements
 def pairwise_mutual_information(
     inputs: Tensor,
     num_bins: int,
     method: Literal["gaussian", "sigmoid"],
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
-    epsilon: float = 1e-10    
+    epsilon: float = 1e-10   
 ) -> list[float]:
     """Calculate the (differentiable) pairwise mutual information between input
     channels.

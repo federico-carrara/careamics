@@ -48,6 +48,7 @@ class MutualInfoLossConfig(BaseModel):
     recommended to get sharp binning functions."""
     epsilon: float = 1e-10  
     """Small value to ensure numerical stability."""
+    # TODO: add burn-in period before starting to compute mutual information
     
     @field_validator("loss_type")
     def validate_loss_type(cls, v):

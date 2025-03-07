@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import torch
 
+from careamics.losses import pairwise_mutual_information
 from careamics.losses.lvae.loss_utils import free_bits_kl, get_kl_weight
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
@@ -15,7 +16,7 @@ from careamics.models.lvae.likelihoods import (
 )
 
 if TYPE_CHECKING:
-    from careamics.config import LVAELossConfig
+    from careamics.config import LVAELossConfig, MutualInfoLossConfig
 
 Likelihood = Union[LikelihoodModule, GaussianLikelihood, NoiseModelLikelihood]
 
@@ -24,7 +25,7 @@ def get_reconstruction_loss(
     reconstruction: torch.Tensor,
     target: torch.Tensor,
     likelihood_obj: Likelihood,
-) -> dict[str, torch.Tensor]:
+) -> torch.Tensor:
     """Compute the reconstruction loss (negative log-likelihood).
 
     Parameters
@@ -280,7 +281,33 @@ def _get_kl_divergence_loss_denoisplit(
         free_bits_coeff=1.0,
         img_shape=img_shape,
     )
+    
 
+def get_mutual_info_loss(
+    inputs: torch.Tensor,
+    mi_loss_type: Literal["hist", "MINE"],
+    num_bins: int,
+    binning_method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: float,
+    sigmoid_scale: float,
+    epsilon: float,
+) -> torch.Tensor:
+    """Compute the mutual information loss."""
+    if mi_loss_type == "hist":
+        mutual_info_loss = pairwise_mutual_information(
+            inputs=inputs,
+            num_bins=num_bins,
+            method=binning_method,
+            gaussian_sigma=gaussian_sigma,
+            sigmoid_scale=sigmoid_scale,
+            epsilon=epsilon,
+        )
+    else:
+        raise NotImplementedError("MINE mutual info loss not yet implemented")
+
+    # TODO: aggregate the different results
+    
+    return torch.tensor(mutual_info_loss, device=inputs.device)
 
 # TODO: @melisande-c suggested to refactor this as a class (see PR #208)
 # - loss computation happens by calling the `__call__` method
