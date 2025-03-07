@@ -22,6 +22,7 @@ class SpectralMixer(nn.Module):
         wv_range: Sequence[int],
         ref_learnable: bool = False,
         num_bins: int = 32,
+        spectra_shifts: Sequence[int] = None,
         num_frozen_epochs: int = 0,
     ):
         """
@@ -35,6 +36,9 @@ class SpectralMixer(nn.Module):
             Whether to make the reference matrix learnable. Default is `False`.
         num_bins : int, optional
             The number of bins to use for the reference matrix. Default is 32.
+        spectra_shifts : Sequence[int], optional
+            The shifts to apply to spectra in the reference matrix to change their
+            overlap. Default is None.
         num_frozen_epochs : int, optional
             The number of epochs before starting learning the reference matrix.
             Default is 0.
@@ -44,13 +48,15 @@ class SpectralMixer(nn.Module):
         self.wv_range = wv_range
         self.ref_learnable = ref_learnable
         self.num_bins = num_bins
+        self.spectra_shifts = spectra_shifts
         self.num_frozen_epochs = num_frozen_epochs
         
         # get the reference matrix from FPBase
         matrix = FPRefMatrix(
             fp_names=self.fluorophores,
             n_bins=self.num_bins,
-            interval=self.wv_range
+            interval=self.wv_range,
+            shifts=self.spectra_shifts,
         )
         self.ref_matrix = nn.Parameter(
             matrix.create(), 
@@ -89,5 +95,3 @@ class SpectralMixer(nn.Module):
         """
         B, F, *spatial = x.shape 
         return torch.matmul(self.ref_matrix, x.view(B, F, -1)).view(B, -1, *spatial)
-    
-

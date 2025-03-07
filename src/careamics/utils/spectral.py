@@ -1,14 +1,32 @@
 """Utility functions for working with spectral data."""
-
 import warnings
-from functools import cached_property
 from typing import Optional, Sequence, Union
+from typing_extensions import Self
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from .fpbase import get_fp_emission_spectrum
+
+
+def _get_bins(num_bins: int, interval: Sequence[int],) -> torch.Tensor:
+    """Get bin delimiters for the given interval.
+    
+    Parameters
+    ----------
+    num_bins : int
+        The number of bins to create.
+    interval : Sequence[int, int]
+        The interval to create the bins for.
+    
+    Returns
+    -------
+    torch.Tensor
+        The bin delimiters.
+    """
+    return torch.linspace(interval[0], interval[1], num_bins + 1)
 
 
 class Spectrum(BaseModel):
@@ -18,8 +36,7 @@ class Spectrum(BaseModel):
     """
 
     model_config = ConfigDict(
-        validate_assignment=True,
-        arbitrary_types_allowed=True,
+        validate_assignment=True, arbitrary_types_allowed=True,
     )
 
     wavelength: torch.Tensor
@@ -51,6 +68,16 @@ class Spectrum(BaseModel):
     def from_fpbase(cls, name: str) -> "Spectrum":
         data = get_fp_emission_spectrum(name)
         return cls(wavelength=data[:, 0], intensity=data[:, 1])
+    
+    def _shift(self, shift: int) -> None:
+        """Shift the spectrum by the given amount in place.
+        
+        Parameters
+        ----------
+        shift : int
+            The amount to shift the spectrum by.
+        """
+        self.wavelength += shift
 
     def _align(self, other: 'Spectrum') -> tuple['Spectrum', 'Spectrum']:
         """Align self and other over their wavelength attributes.
@@ -106,33 +133,11 @@ class Spectrum(BaseModel):
 
         return new_intensity
 
-    def _get_bins(self, num_bins: int, interval: Sequence[int],) -> torch.Tensor:
-        """Get bin delimiters for the given interval.
-        
-        Parameters
-        ----------
-        num_bins : int
-            The number of bins to create.
-        interval : Sequence[int, int]
-            The interval to create the bins for.
-        
-        Returns
-        -------
-        torch.Tensor
-            The bin delimiters.
-        """
-        range_ = interval[1] - interval[0]
-        min_bin_length = range_ // num_bins
-        remainder = range_ % num_bins
-        bins = [interval[0]]
-        for i in range(num_bins):
-            # add extra wavelengths (reminder) at the beginning
-            curr_bin_length = min_bin_length if i >= remainder else min_bin_length + 1
-            bins.append(bins[-1] + curr_bin_length)
-        return torch.tensor(bins)
-
     def bin_intensity(
-        self, num_bins: int, interval: Optional[Sequence[int]] = None
+        self,
+        num_bins: int,
+        interval: Optional[Sequence[int]] = None,
+        interpolate: bool = True
     ) -> torch.Tensor:
         """Bins the intensity values according to the provided bins for the wavelength.
         
@@ -144,6 +149,9 @@ class Spectrum(BaseModel):
             Interval of wavelengths in which binning is done. Wavelengths outside this
             interval are ignored. If `None`, the interval is set to the range of the
             wavelength. Default is `None`.
+        interpolate: bool
+            Whether to interpolate the intensity values onto a finer grid of
+            wavelengths to get a more accurate binning. Default is `True`.
 
         Returns
         -------
@@ -153,20 +161,33 @@ class Spectrum(BaseModel):
         if not interval:
             interval = (self.wavelength.min(), self.wavelength.max())
         
-        # initialize
-        bin_edges = self._get_bins(
+        # interpolate the intensity values
+        if interpolate:
+            interp_factor = 100 * num_bins // (interval[1] - interval[0])
+            wavelength = torch.linspace(
+                interval[0], interval[1], interp_factor * len(self.wavelength)
+            )
+            intensity = np.interp(wavelength, self.wavelength, self.intensity)
+        else:
+            wavelength = self.wavelength
+            intensity = self.intensity
+        
+        # get the bin edges
+        bin_edges = _get_bins(
             num_bins=num_bins,
             interval=interval,
         )
         binned_intensity = torch.zeros(len(bin_edges) - 1)
 
         # digitize the wavelength tensor into bin indices
-        bin_indices = torch.bucketize(self.wavelength.contiguous(), bin_edges, right=False)
+        bin_indices = torch.bucketize(
+            wavelength.contiguous(), bin_edges, right=False
+        )
 
         # perform the binning
         for i in range(1, len(bin_edges)):
             mask = bin_indices == i
-            binned_intensity[i - 1] = self.intensity[mask].sum()
+            binned_intensity[i - 1] = intensity[mask].sum()
             
         return binned_intensity
 
@@ -186,7 +207,11 @@ class FPRefMatrix(BaseModel):
     >>> ref_matrix.create()
     """
     
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="allow",
+    )
 
     fp_names: Sequence[str]
     """The names of the fluorophores to include in the reference matrix."""
@@ -194,16 +219,98 @@ class FPRefMatrix(BaseModel):
     n_bins: int = 32
     """The number of wavelength bins to use for the FP spectra."""
     
-    interval: Optional[Sequence[int]] = None
+    interval: Optional[tuple[int, int]] = None
     """The interval of wavelengths in which binning is done. Wavelengths outside this
     interval are ignored. If `None`, the interval is set to the range of the wavelength."""
     
-    matrix: Optional[torch.Tensor] = None
-    """The reference matrix containing the fluorophore emission spectra."""
+    shifts: Optional[Sequence[int]] = None
+    """The shifts to apply to the fluorophore emission spectra to increase/decrease
+    overlap."""
+    
+    data: Optional[torch.Tensor] = None
+    """The data array containing the fluorophore emission spectra."""
+    
+    @field_validator("interval")
+    def _validate_interval(cls, value: Optional[Sequence[int]]) -> Optional[Sequence[int]]:
+        if value is not None:
+            assert value[0] < value[1], "Invalid interval provided!"
+        return value
+    
+    @model_validator(mode="after")
+    def _validate_shifts(self: Self) -> Self:
+        if self.shifts is not None:
+            assert len(self.shifts) == len(self.fp_names), (
+                "Number of shifts must match the number of fluorophores!"
+            )
+        return self
+    
+    @classmethod
+    def from_array(
+        cls,
+        matrix: Union[NDArray, torch.Tensor],
+        fp_names: Sequence[str],
+        n_bins: int,
+        interval: Sequence[int],
+        background: bool = False,
+    ) -> "FPRefMatrix":
+        """Create a reference matrix from an array of fluorophore emission spectra.
+        
+        Parameters
+        ----------
+        matrix : Union[NDArray, torch.Tensor]
+            The array containing the fluorophore emission spectra, of shape [W, F].
+        fp_names : Sequence[str]
+            The names of the fluorophores.
+        n_bins : int
+            The number of wavelength bins to use for the FP spectra.
+        interval : Sequence[int]
+            The interval of wavelengths in which binning is done. Wavelengths outside
+            this interval are ignored.
+        background : bool
+            Whether the array contains a background spectrum. Default is False.
+        """
+        F = matrix.shape[1]
+        if background:
+            assert F == len(fp_names) + 1, (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+        else:
+            assert F == len(fp_names), (
+                "Number of fluorophores and background spectrum do not match!"
+            )
+
+        return cls(
+            fp_names=fp_names,
+            n_bins=n_bins,
+            interval=interval,
+            data=torch.tensor(matrix),
+        )
     
     def _fetch_fp_spectra(self) -> list[Spectrum]:
         """Fetch the fluorophore emission spectra from FPbase."""
         return [Spectrum.from_fpbase(fp_name) for fp_name in self.fp_names]
+    
+    def _shift_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
+        """Shift the fluorophore emission spectra to increase/decrease overlap.
+        
+        Parameters
+        ----------
+        fp_spectra : list[Spectrum]
+            The fluorophore emission spectra to shift.
+        
+        Returns
+        -------
+        list[Spectrum]
+            The shifted fluorophore emission spectra.
+        """
+        if self.shifts is None:
+            return fp_spectra
+        
+        shifted_fp_spectra = []
+        for shift, sp in zip(self.shifts, fp_spectra):
+            sp._shift(shift)
+            shifted_fp_spectra.append(sp)
+        return shifted_fp_spectra
     
     def _sort_fp_spectra(self, fp_spectra: list[Spectrum]) -> list[Spectrum]:
         """Sort the fluorophore emission spectra by wavelength."""
@@ -240,11 +347,13 @@ class FPRefMatrix(BaseModel):
         aligned_fp_sp = [fp_sp0] + aligned_fp_sp
         return aligned_fp_sp
 
-    @cached_property
-    def fp_spectra(self) -> list[Spectrum]:
-        """Aligned fluorophore emission spectra."""
+    def _get_fp_spectra(self) -> list[Spectrum]:
+        """Get sorted and aligned fluorophore emission spectra."""
         # fetch emission spectra
         fp_sp = self._fetch_fp_spectra()
+        
+        # shift spectra (if necessary)
+        fp_sp = self._shift_fp_spectra(fp_sp)
         
         # sort spectra by wavelength
         fp_sp = self._sort_fp_spectra(fp_sp)
@@ -294,6 +403,13 @@ class FPRefMatrix(BaseModel):
         torch.Tensor
             The reference matrix.
         """
+        # check if data is already created
+        if self.data is not None:
+            print("Reference matrix already created. Returning the existing one.")
+            return self.data
+        
+        self.fp_spectra = self._get_fp_spectra()
+        
         # get the intensities of each fluorophore spectrum
         if binned:
             intensities = self._bin_fp_intensities(self.fp_spectra) 
@@ -304,8 +420,8 @@ class FPRefMatrix(BaseModel):
         if normalize:
             intensities = [self._normalize(intensity) for intensity in intensities]
         
-        self.matrix = torch.stack([intensity for intensity in intensities], axis=1)
-        return self.matrix
+        self.data = torch.stack([intensity for intensity in intensities], axis=1)
+        return self.data
         
     def add_background_spectrum(
         self, 
@@ -339,7 +455,7 @@ class FPRefMatrix(BaseModel):
             f"Coordinates should be as many as the image spatial dimensions! "
             f"Got instead {len(coords)} coordinates for image of shape {image.shape}."
         )
-        assert self.matrix.shape[1] <= len(self.fp_names), (
+        assert self.data.shape[1] <= len(self.fp_names), (
             "Background spectrum already added!"
         )
         
@@ -364,21 +480,36 @@ class FPRefMatrix(BaseModel):
         bg_spectrum_intensity = self._normalize(bg_spectrum_intensity)
         
         # add background spectrum to the reference matrix
-        self.matrix = torch.cat([self.matrix, bg_spectrum_intensity.unsqueeze(1)], axis=1)
-        return self.matrix
+        self.data = torch.cat([self.data, bg_spectrum_intensity.unsqueeze(1)], axis=1)
+        return self.data
     
-    def plot(self, **kwargs):
-        """Plot the reference matrix."""
-        assert hasattr(self, "matrix"), "Reference matrix not created yet!"
+    def plot(self, show_wavelengths: bool = True) -> None:
+        """Plot the reference matrix.
         
+        Parameters
+        ----------
+        show_wavelengths : bool
+            Whether to show the wavelength values on the x-axis. Default is False.
+        """
+        assert hasattr(self, "data"), "Reference matrix not created yet!"
+        
+        if show_wavelengths:
+            assert self.interval is not None, "Wavelength interval not provided!"
+            bins = _get_bins(self.n_bins, self.interval)
+            bins = np.asarray(bins)
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+
         import matplotlib.pyplot as plt
-        
+
         fig, ax = plt.subplots(figsize=(10, 5))
         labels = list(self.fp_names) + ["background"]
-        for i in range(self.matrix.shape[1]):
-            ax.plot(self.matrix[:, i], label=labels[i])
+        for i in range(self.data.shape[1]):
+            ax.plot(self.data[:, i], label=labels[i])
         ax.set_xlabel("Wavelength bins")
         ax.set_ylabel("Normalized intensity")
         ax.set_title("Reference FP spectra")
+        if show_wavelengths:
+            ax.set_xticks(range(self.n_bins))
+            ax.set_xticklabels(bin_centers.astype(int), rotation=45)
         ax.legend()
         plt.show()
