@@ -404,12 +404,16 @@ def pairwise_mutual_information(
     list[float]
         The pairwise mutual information between input channels.
     """
-    C = inputs.shape[1]
-    # calculate the bin centers
-    min_ = min([torch.min(inputs[:, i]) for i in range(C)])
-    max_ = max([torch.max(inputs[:, i]) for i in range(C)])
-    bins = torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
-    bin_centers = (bins[:-1] + bins[1:]) / 2
+    B, C, *spatial_dims = inputs.shape[:2]
+
+    # calculate the bin centers (same for all channels, diff for each batch item)
+    mins = min(torch.min(inputs, dim=tuple(torch.arange(1, len(spatial_dims) + 2))))
+    maxs = max(torch.max(inputs, dim=tuple(torch.arange(1, len(spatial_dims) + 2))))
+    bins = torch.stack([
+        torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
+        for min_, max_ in zip(mins, maxs)
+    ], dim=0) # shape: (B, K + 1)
+    bin_centers = (bins[:, :-1] + bins[:, 1:]) / 2 # shape: (B, K)
     
     # TODO: vectorize over channel dim!
     # Create binnings for each channel
