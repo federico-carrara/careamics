@@ -91,9 +91,10 @@ class LadderVAE(nn.Module):
         analytical_kl: bool,
         fluorophores: Sequence[str],
         wv_range: Sequence[int],
+        num_bins: int,
+        spectra_shifts: Sequence[int] = None,
         ref_learnable: bool = False,
-        num_bins: int = 1,
-        clip_unmixed: bool = True,
+        clip_unmixed: bool = False,
         mixer_num_frozen_epochs: int = 0,
         **kwargs
     ):
@@ -125,7 +126,8 @@ class LadderVAE(nn.Module):
         self.fluorophores = fluorophores
         self.wv_range = wv_range
         self.ref_learnable = ref_learnable
-        self.in_channels = num_bins
+        self.in_channels = self.num_bins = num_bins
+        self.spectra_shifts = spectra_shifts
         self.clip_unmixed = clip_unmixed
         self.mixer_num_frozen_epochs = mixer_num_frozen_epochs
         # -------------------------------------------------------
@@ -258,7 +260,8 @@ class LadderVAE(nn.Module):
                 fluorophores=self.fluorophores,
                 wv_range=self.wv_range,
                 ref_learnable=self.ref_learnable,
-                num_bins=self.in_channels,
+                num_bins=self.num_bins,
+                spectra_shifts=self.spectra_shifts,
                 num_frozen_epochs=self.mixer_num_frozen_epochs,
             )
         else:
