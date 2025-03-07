@@ -11,12 +11,7 @@ from torch import Tensor
 
 
 # TODO: refactoring: code is highly duplicated and redundant. Create a class?
-
-def _gaussian_kernel_binning(
-    x: Tensor,
-    centers: Tensor,
-    sigma: float    
-) -> Tensor:
+def _gaussian_kernel_binning(x: Tensor, centers: Tensor,sigma: float) -> Tensor:
     """Bin the input tensor using Gaussian kernels centered on the bin centers.
     
     For each data point in x, we will have a kernel value for each bin (i.e., a vector
@@ -25,31 +20,33 @@ def _gaussian_kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     sigma: float
         The standard deviation of the Gaussian kernel.
     
     Parameters
     ----------
     Tensor
-        The kernel values of the input tensor with shape (B, N, K).
+        The kernel values of the input tensor with shape (B, [C], N, K).
     """
+    assert x.dim() in (2, 3), (
+        "Input tensors must have 2 dimensions (B, N), or 3 (B, C, N)."
+    )
+    if x.dim() == 2: # add channel dimension
+        x = x.unsqueeze(1) # shape: (B, C, N) 
+    
     # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2)
-    centers = centers.unsqueeze(0).unsqueeze(0)
+    x = x.unsqueeze(2) # shape: (B, C, N, 1)
+    centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
     
     # compute kernel values
-    residuals = x - centers
-    return torch.exp(-0.5 * (residuals / sigma).pow(2))
+    residuals = x - centers # shape: (B, C, N, K)
+    return torch.exp(-0.5 * (residuals / sigma).pow(2)).unsqueeze()
 
 
-def _sigmoid_kernel_binning(
-    x: Tensor,
-    centers: Tensor,
-    scale: float
-) -> Tensor:
+def _sigmoid_kernel_binning(x: Tensor, centers: Tensor, scale: float) -> Tensor:
     """Bin the input tensor using sigmoid kernels centered on the bin centers.
     
     For each data point in x, we will have a kernel value for each bin (i.e., a vector
@@ -58,23 +55,29 @@ def _sigmoid_kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     scale: float
         The scaling factor of the sigmoid kernel.
     
     Parameters
     ----------
     Tensor
-        The kernel values of the input tensor with shape (B, N, K).
+        The kernel values of the input tensor with shape (B, C, N, K).
     """
-    # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2)
-    centers = centers.unsqueeze(0).unsqueeze(0)
+    assert x.dim() in (2, 3), (
+        "Input tensors must have 2 dimensions (B, N), or 3 (B, C, N)."
+    )
+    if x.dim() == 2: # add channel dimension
+        x = x.unsqueeze(1) # shape: (B, C, N) 
     
+    # add dimensions to x and centers to allow broadcasting
+    x = x.unsqueeze(2) # shape: (B, C, N, 1)
+    centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
+
     # compute kernel values
-    delta = centers[..., 1] - centers[..., 0] # bin width
+    delta = centers[..., 1] - centers[..., 0] # bin width (scalar)
     arg1 = scale * (x - (centers - delta / 2))
     arg2 = scale * (x - (centers + delta / 2))
     return torch.sigmoid(arg1) - torch.sigmoid(arg2)
@@ -92,15 +95,20 @@ def _kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     method: Literal["gaussian", "sigmoid"]
         The method to compute the kernel binning.
     gaussian_sigma: float
         The standard deviation of the Gaussian kernel. Default is 0.5.
     sigmoid_scale: float
         The scaling factor of the sigmoid kernel. Default is 10.0.
+        
+    Returns
+    -------
+    Tensor
+        The kernel values of the input tensor with shape (B, [C], N, K).
     """
     if method == "gaussian":
         kernel_values = _gaussian_kernel_binning(x, centers, gaussian_sigma)
@@ -120,7 +128,7 @@ def _get_marginal_pdf(
     Parameters
     ----------
     binned_values: Tensor
-        The kernel binning values for the current batch with shape (B, N, K).
+        The kernel binning values for the current batch with shape (B, [C], N, K).
     density: bool, optional
         Whether to normalize the histogram to get the PDF. Default is True.
     epsilon: float, optional
@@ -129,15 +137,15 @@ def _get_marginal_pdf(
     Returns
     -------
     Tensor
-        The marginal PDF of the variables in the current batch with shape (B, K).
+        The marginal PDF of the variables in the current batch with shape (B, [C], K).
     """
     # average over samples to get the soft histogram
-    hist = torch.mean(binned_values, dim=1) # shape: (B, K)
+    hist = torch.mean(binned_values, dim=-2) # shape: (B, [C], K)
     
     # normalize to get the PDF (optional)
     normalization = 1
     if density:
-        normalization = torch.sum(hist, dim=1).unsqueeze(1) + epsilon
+        normalization = torch.sum(hist, dim=-1).unsqueeze(-1) + epsilon
     return hist / normalization
 
 
@@ -415,26 +423,19 @@ def pairwise_mutual_information(
     ], dim=0) # shape: (B, K + 1)
     bin_centers = (bins[:, :-1] + bins[:, 1:]) / 2 # shape: (B, K)
     
-    # TODO: vectorize over channel dim!
     # Create binnings for each channel
-    binned_values = torch.stack([
-        _kernel_binning(
-            inputs[:, i].flatten(1),
-            bin_centers,
-            method,
-            gaussian_sigma=gaussian_sigma,
-            sigmoid_scale=sigmoid_scale
-        )
-        for i in range(C)
-    ]) # shape: (C, B, [Z]*Y*X, K), K=num_bins
+    binned_values = _kernel_binning(
+        inputs.flatten(2),
+        bin_centers,
+        method,
+        gaussian_sigma=gaussian_sigma,
+        sigmoid_scale=sigmoid_scale
+    ) # shape: (B, C, [Z]*Y*X, K), K=num_bins
     
-    # TODO: vectorize over channel dim!
     # Create marginal PDFs for each channel
-    marginal_pdfs = [
-        _get_marginal_pdf(binned_values[i, ...], epsilon)
-        for i in range(C)
-    ] # shape: (C, B, K)
+    marginal_pdfs = _get_marginal_pdf(binned_values, epsilon) # shape: (B, C, K)
     
+    # TODO: need to reshape binned_values with all pairwise combinations of channels
     # Get all pairwise joint pdfs
     joint_pdfs = {
         f"{i}_{j}" : _get_joint_pdf(binned_values[i], binned_values[j], epsilon)
