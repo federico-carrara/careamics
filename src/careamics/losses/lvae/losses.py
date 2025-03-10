@@ -614,7 +614,7 @@ def lambdasplit_loss(
     
     # Mutual Info loss computation (optional)
     mutual_info_loss = 0.0
-    if config.enable_mutual_info:
+    if config.mutual_info_weight > 0.0:
         mutual_info_loss = get_mutual_info_loss(
             inputs=unmixed,
             mi_loss_type=config.mutual_info_params.loss_type,
