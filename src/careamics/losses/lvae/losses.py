@@ -301,14 +301,15 @@ def get_mutual_info_loss(
             gaussian_sigma=gaussian_sigma,
             sigmoid_scale=sigmoid_scale,
             epsilon=epsilon,
-        )
+        ) # shape: (B, C * (C-1) / 2)
     else:
-        raise NotImplementedError("MINE mutual info loss not yet implemented")
+        raise NotImplementedError("MINE mutual info loss not implemented yet!")
 
     # average over batch dimension
-    mutual_info_loss = mutual_info_loss.mean(dim=0)
+    mutual_info_loss = mutual_info_loss.mean(dim=0) # shape: (C * (C-1) / 2)
     
     return mutual_info_loss.to(inputs.device)
+
 
 # TODO: @melisande-c suggested to refactor this as a class (see PR #208)
 # - loss computation happens by calling the `__call__` method
@@ -614,7 +615,16 @@ def lambdasplit_loss(
     # Mutual Info loss computation (optional)
     mutual_info_loss = 0.0
     if config.enable_mutual_info:
-        ...
+        mutual_info_loss = get_mutual_info_loss(
+            inputs=unmixed,
+            mi_loss_type=config.mutual_info_params.loss_type,
+            num_bins=config.mutual_info_params.num_bins,
+            binning_method=config.mutual_info_params.binning_method,
+            gaussian_sigma=config.mutual_info_params.gaussian_sigma,
+            sigmoid_scale=config.mutual_info_params.sigmoid_scale,
+            epsilon=config.mutual_info_params.epsilon,
+        )
+        mutual_info_loss = config.mutual_info_weight * mutual_info_loss
 
     net_loss = recons_loss + kl_loss + mutual_info_loss
     output = {
@@ -625,6 +635,7 @@ def lambdasplit_loss(
             else recons_loss
         ),
         "kl_loss": kl_loss.detach(),
+        "mi_loss": mutual_info_loss.detach(),
     }
     # https://github.com/openai/vdvae/blob/main/train.py#L26
     if torch.isnan(net_loss).any():
