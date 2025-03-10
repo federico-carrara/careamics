@@ -635,8 +635,18 @@ def lambdasplit_loss(
             else recons_loss
         ),
         "kl_loss": kl_loss.detach(),
-        "mi_loss": mutual_info_loss.detach(),
     }
+    # add mutual information loss values
+    idxs = [
+        f"{i}-{j}" 
+        for i in range(unmixed.shape[1]) for j in range(i + 1, unmixed.shape[1])
+    ]
+    mi_loss_dict = {
+        f"mi_loss_ch_{idx}": mi_loss
+        for idx, mi_loss in zip(idxs, mutual_info_loss.detach())
+    }
+    output.update(mi_loss_dict)
+    
     # https://github.com/openai/vdvae/blob/main/train.py#L26
     if torch.isnan(net_loss).any():
         return None

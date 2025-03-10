@@ -427,8 +427,8 @@ class VAEModule(L.LightningModule):
             curr_psnr = self.compute_val_psnr(out, target)
             for i, psnr in enumerate(curr_psnr):
                 self.log(
-                    f"val_psnr_ch{i+1}_batch", 
-                    psnr, 
+                    f"val_psnr_ch{i+1}_batch",
+                    psnr,
                     on_epoch=True,
                     batch_size=batch_size,
                 )
