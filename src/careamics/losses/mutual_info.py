@@ -6,6 +6,7 @@ Inspired by:
 
 from typing import Literal, Optional
 
+import numpy as np
 import torch
 from torch import Tensor
 
@@ -38,12 +39,12 @@ def _gaussian_kernel_binning(x: Tensor, centers: Tensor,sigma: float) -> Tensor:
         x = x.unsqueeze(1) # shape: (B, C, N) 
     
     # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2) # shape: (B, C, N, 1)
+    x = x.unsqueeze(-1) # shape: (B, C, N, 1)
     centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
     
     # compute kernel values
     residuals = x - centers # shape: (B, C, N, K)
-    return torch.exp(-0.5 * (residuals / sigma).pow(2)).unsqueeze()
+    return torch.exp(-0.5 * (residuals / sigma).pow(2))
 
 
 def _sigmoid_kernel_binning(x: Tensor, centers: Tensor, scale: float) -> Tensor:
@@ -73,7 +74,7 @@ def _sigmoid_kernel_binning(x: Tensor, centers: Tensor, scale: float) -> Tensor:
         x = x.unsqueeze(1) # shape: (B, C, N) 
     
     # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2) # shape: (B, C, N, 1)
+    x = x.unsqueeze(-1) # shape: (B, C, N, 1)
     centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
 
     # compute kernel values
@@ -190,7 +191,7 @@ def _get_joint_pdf(
 
 
 def _compute_mutual_info(
-    marginal_1: Tensor, marginal_2: Tensor, joint: Tensor
+    marginal_1: Tensor, marginal_2: Tensor, joint: Tensor, epsilon: float = 1e-10
 ) -> float:
     """Compute the mutual information from marginal and joint distributions.
     
@@ -204,6 +205,8 @@ def _compute_mutual_info(
         The marginal PDF of the second variable with shape (B, [C], K).
     joint: Tensor
         The joint PDF of the two variables with shape (B, [C], K, K).
+    epsilon: float, optional
+        A small value to avoid log(0) and division by 0. Default is 1e-10.
     
     Returns
     -------
@@ -211,11 +214,10 @@ def _compute_mutual_info(
         The mutual information between the two variables described by the PDFs.
     """
     marginal_prod = marginal_1.unsqueeze(-1) * marginal_2.unsqueeze(-2) # shape: (B, [C], K, K)
-    non_zero = joint > 0.0
+    joint[joint == 0.0] += epsilon # avoid log(0)
+    marginal_prod[marginal_prod == 0.0] += epsilon # avoid log(0)
     return torch.sum(
-        joint[non_zero] * (
-            torch.log(joint[non_zero]) - torch.log(marginal_prod[non_zero])
-        )
+        joint * (torch.log(joint) - torch.log(marginal_prod)), dim=(-2, -1)
     )
 
 
@@ -414,11 +416,11 @@ def pairwise_mutual_information(
     list[float]
         The pairwise mutual information between input channels.
     """
-    B, C, *spatial_dims = inputs.shape[:2]
+    B, C, *spatial_dims = inputs.shape
 
     # calculate the bin centers (same for all channels, diff for each batch item)
-    mins = min(torch.min(inputs, dim=tuple(torch.arange(1, len(spatial_dims) + 2))))
-    maxs = max(torch.max(inputs, dim=tuple(torch.arange(1, len(spatial_dims) + 2))))
+    mins = torch.amin(inputs, dim=tuple(np.arange(1, len(spatial_dims) + 2)))
+    maxs = torch.amax(inputs, dim=tuple(np.arange(1, len(spatial_dims) + 2)))
     bins = torch.stack([
         torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
         for min_, max_ in zip(mins, maxs)
@@ -440,16 +442,16 @@ def pairwise_mutual_information(
     # TODO: need to reshape binned_values with all pairwise combinations of channels
     # Get all pairwise joint pdfs
     joint_pdfs = {
-        f"{i}_{j}" : _get_joint_pdf(binned_values[i], binned_values[j], epsilon)
+        f"{i}_{j}" : _get_joint_pdf(binned_values[:, i], binned_values[:, j], epsilon)
         for i in range(C)
         for j in range(i + 1, C)
-    } # shape: (C*C, B, K, K)
+    } # shape: {C * C * (B, K, K)}
     
     # TODO: vectorize!
     # Calculate the pairwise mutual information
     return [
         _compute_mutual_info(
-            marginal_pdfs[i], marginal_pdfs[j], joint_pdfs[f"{i}_{j}"]
+            marginal_pdfs[:, i], marginal_pdfs[:, j], joint_pdfs[f"{i}_{j}"]
         )
         for i in range(C)
         for j in range(i + 1, C)
