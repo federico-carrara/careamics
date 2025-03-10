@@ -390,7 +390,7 @@ def pairwise_mutual_information(
     gaussian_sigma: Optional[float] = 0.5,
     sigmoid_scale: Optional[float] = 10.0,
     epsilon: float = 1e-10   
-) -> list[float]:
+) -> Tensor:
     """Calculate the (differentiable) pairwise mutual information between input
     channels.
 
@@ -413,7 +413,7 @@ def pairwise_mutual_information(
         
     Returns
     -------
-    torch.Tensor
+    Tensor
         The pairwise mutual information between input channels over a batch.
         Hence, the output tensor has shape (B, C * (C - 1) / 2).
     """
