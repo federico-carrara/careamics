@@ -292,8 +292,11 @@ def get_mutual_info_loss(
     sigmoid_scale: float,
     epsilon: float,
 ) -> torch.Tensor:
-    """Compute the mutual information loss, i.e., the negative mutual information
+    """Compute the mutual information loss, i.e., the mutual information
     between pairs of channels in the input tensor.
+    
+    Recall that our objective is to minimize mutual information between channels
+    to force them to show independent and diverse features.
     
     Parameters
     ----------
@@ -327,7 +330,7 @@ def get_mutual_info_loss(
         The mutual information loss. Shape is (C * (C-1) / 2).
     """
     if mi_loss_type == "hist":
-        mutual_info_loss = pairwise_mutual_information(
+        mutual_info = pairwise_mutual_information(
             inputs=inputs,
             num_bins=num_bins,
             method=binning_method,
@@ -337,9 +340,9 @@ def get_mutual_info_loss(
         ) # shape: (B, C * (C-1) / 2)
     else:
         raise NotImplementedError("MINE mutual info loss not implemented yet!")
-
+    
     # average over batch dimension
-    mutual_info_loss = mutual_info_loss.mean(dim=0) # shape: (C * (C-1) / 2)
+    mutual_info_loss = mutual_info.mean(dim=0) # shape: (C * (C-1) / 2)
     
     return mutual_info_loss.to(inputs.device)
 
@@ -659,7 +662,7 @@ def lambdasplit_loss(
         )
         mutual_info_loss = config.mutual_info_weight * mutual_info_loss
 
-    net_loss = recons_loss + kl_loss + mutual_info_loss
+    net_loss = recons_loss + kl_loss + mutual_info_loss.mean()
     output = {
         "loss": net_loss,
         "reconstruction_loss": (
