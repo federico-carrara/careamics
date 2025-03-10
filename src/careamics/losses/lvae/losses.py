@@ -292,7 +292,40 @@ def get_mutual_info_loss(
     sigmoid_scale: float,
     epsilon: float,
 ) -> torch.Tensor:
-    """Compute the mutual information loss."""
+    """Compute the mutual information loss, i.e., the negative mutual information
+    between pairs of channels in the input tensor.
+    
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        The input tensor for which to compute the mutual information loss. Shape is
+        (B, C, [Z], Y, X).
+    mi_loss_type : Literal["hist", "MINE"]
+        The type of mutual information implementation, either using histograms to
+        estimate joint and marginal distributions of input data or using MINE algorithm.
+    num_bins : int
+        The number of bins for the histogram approximating input distribution. A good
+        rule of thumb is to set the number of bins approximately equal to 1/3 of the
+        square root of the number of samples (e.g., for an image 100x100 a sensible
+        values is ~30).
+    binning_method : Literal["gaussian", "sigmoid"]
+        Methods for differentiable binning in the histogram approach.
+    gaussian_sigma : float
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is recommended
+        to get sharper binning functions and, hence, a better estimate of the mutual
+        information.
+    sigmoid_scale : float
+        The scaling factor of the sigmoid kernel. A value greater than 10 is recommended
+        to get sharper binning functions and, hence, a better estimate of the mutual
+        information.
+    epsilon : float
+        Small value to ensure numerical stability.
+    
+    Returns
+    -------
+    mutual_info_loss : torch.Tensor
+        The mutual information loss. Shape is (C * (C-1) / 2).
+    """
     if mi_loss_type == "hist":
         mutual_info_loss = pairwise_mutual_information(
             inputs=inputs,
