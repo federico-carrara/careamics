@@ -78,7 +78,7 @@ def _sigmoid_kernel_binning(x: Tensor, centers: Tensor, scale: float) -> Tensor:
     centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
 
     # compute kernel values
-    delta = centers[..., 1] - centers[..., 0] # bin width (scalar)
+    delta = (centers[..., 1] - centers[..., 0])[..., None] # bin width (scalar)
     arg1 = scale * (x - (centers - delta / 2))
     arg2 = scale * (x - (centers + delta / 2))
     return torch.sigmoid(arg1) - torch.sigmoid(arg2)
@@ -413,8 +413,9 @@ def pairwise_mutual_information(
         
     Returns
     -------
-    list[float]
-        The pairwise mutual information between input channels.
+    torch.Tensor
+        The pairwise mutual information between input channels over a batch.
+        Hence, the output tensor has shape (B, C * (C - 1) / 2).
     """
     B, C, *spatial_dims = inputs.shape
 
@@ -449,10 +450,10 @@ def pairwise_mutual_information(
     
     # TODO: vectorize!
     # Calculate the pairwise mutual information
-    return [
+    return torch.stack([
         _compute_mutual_info(
             marginal_pdfs[:, i], marginal_pdfs[:, j], joint_pdfs[f"{i}_{j}"]
         )
         for i in range(C)
         for j in range(i + 1, C)
-    ]
+    ]).transpose(1, 0) # shape: (B, C * (C - 1) / 2)
