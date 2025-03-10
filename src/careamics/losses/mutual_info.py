@@ -161,10 +161,10 @@ def _get_joint_pdf(
     ----------
     binned_values1: Tensor
         The kernel binning values for the first variable and the current batch,
-        with shape (B, N, K).
+        with shape (B, [C], N, K).
     binned_values2: Tensor
         The kernel binning values for the second variable and the current batch,
-        with shape (B, N, K).
+        with shape (B, [C], N, K).
     density: bool, optional
         Whether to normalize the histogram to get the PDF. Default is True.
     epsilon: float, optional
@@ -173,17 +173,19 @@ def _get_joint_pdf(
     Returns
     -------
     Tensor
-        The joint PDF of the variables in the current batch with shape (B, K, K).
+        The joint PDF of the variables in the current batch with shape (B, [C], K, K).
     """
     # calculate joint kernel values
-    joint_kernel_values = torch.matmul(binned_values1.transpose(1, 2), binned_values2)
+    joint_kernel_values = torch.matmul(
+        binned_values1.transpose(-2, -1), binned_values2
+    ) # shape: (B, [C], K, K)
 
     # normalize to get the PDF (optional)
     normalization = 1
     if density:
         normalization = torch.sum(
-            joint_kernel_values, dim=(1, 2)
-        ).view(-1, 1, 1) + epsilon
+            joint_kernel_values, dim=(-2, -1), keepdim=True
+        ) + epsilon
     return joint_kernel_values / normalization
 
 
@@ -197,18 +199,18 @@ def _compute_mutual_info(
     Parameters
     ----------
     marginal_1: Tensor
-        The marginal PDF of the first variable with shape (B, K).
+        The marginal PDF of the first variable with shape (B, [C], K).
     marginal_2: Tensor
-        The marginal PDF of the second variable with shape (B, K).
+        The marginal PDF of the second variable with shape (B, [C], K).
     joint: Tensor
-        The joint PDF of the two variables with shape (B, K, K).
+        The joint PDF of the two variables with shape (B, [C], K, K).
     
     Returns
     -------
     float
         The mutual information between the two variables described by the PDFs.
     """
-    marginal_prod = marginal_1.unsqueeze(2) * marginal_2.unsqueeze(1) # shape: (B, K, K)
+    marginal_prod = marginal_1.unsqueeze(-1) * marginal_2.unsqueeze(-2) # shape: (B, [C], K, K)
     non_zero = joint > 0.0
     return torch.sum(
         joint[non_zero] * (
@@ -430,7 +432,7 @@ def pairwise_mutual_information(
         method,
         gaussian_sigma=gaussian_sigma,
         sigmoid_scale=sigmoid_scale
-    ) # shape: (B, C, [Z]*Y*X, K), K=num_bins
+    ) # shape: (B, C, N, K), K=num_bins, N=[Z]*Y*X
     
     # Create marginal PDFs for each channel
     marginal_pdfs = _get_marginal_pdf(binned_values, epsilon) # shape: (B, C, K)
