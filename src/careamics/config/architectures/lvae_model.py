@@ -1,6 +1,6 @@
 """LVAE Pydantic model."""
 
-from typing import Literal
+from typing import Literal, Sequence, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
@@ -55,6 +55,8 @@ class LVAEModel(ArchitectureModel):
     """Whether to clip negative values in the unmixed spectra to 0."""
     mixer_num_frozen_epochs: int = Field(default=0)
     """Number of epochs before starting to learn the spectra reference matrix."""
+    spectra_shifts: Optional[Sequence[int]] = None
+    """The shifts of the emission spectra to simulate different overlaps."""
     
     @model_validator(mode="after")
     def validate_conv_strides(self: Self) -> Self:
