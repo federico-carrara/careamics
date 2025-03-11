@@ -6,15 +6,13 @@ Inspired by:
 
 from typing import Literal, Optional
 
+import numpy as np
 import torch
 from torch import Tensor
 
 
-def _gaussian_kernel_binning(
-    x: Tensor,
-    centers: Tensor,
-    sigma: float    
-) -> Tensor:
+# TODO: refactoring: code is highly duplicated and redundant. Create a class?
+def _gaussian_kernel_binning(x: Tensor, centers: Tensor,sigma: float) -> Tensor:
     """Bin the input tensor using Gaussian kernels centered on the bin centers.
     
     For each data point in x, we will have a kernel value for each bin (i.e., a vector
@@ -23,31 +21,33 @@ def _gaussian_kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     sigma: float
         The standard deviation of the Gaussian kernel.
     
     Parameters
     ----------
     Tensor
-        The kernel values of the input tensor with shape (B, N, K).
+        The kernel values of the input tensor with shape (B, [C], N, K).
     """
+    assert x.dim() in (2, 3), (
+        "Input tensors must have 2 dimensions (B, N), or 3 (B, C, N)."
+    )
+    if x.dim() == 2: # add channel dimension
+        x = x.unsqueeze(1) # shape: (B, C, N) 
+    
     # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2)
-    centers = centers.unsqueeze(0).unsqueeze(0)
+    x = x.unsqueeze(-1) # shape: (B, C, N, 1)
+    centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
     
     # compute kernel values
-    residuals = x - centers
+    residuals = x - centers # shape: (B, C, N, K)
     return torch.exp(-0.5 * (residuals / sigma).pow(2))
 
 
-def _sigmoid_kernel_binning(
-    x: Tensor,
-    centers: Tensor,
-    scale: float
-) -> Tensor:
+def _sigmoid_kernel_binning(x: Tensor, centers: Tensor, scale: float) -> Tensor:
     """Bin the input tensor using sigmoid kernels centered on the bin centers.
     
     For each data point in x, we will have a kernel value for each bin (i.e., a vector
@@ -56,23 +56,29 @@ def _sigmoid_kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     scale: float
         The scaling factor of the sigmoid kernel.
     
     Parameters
     ----------
     Tensor
-        The kernel values of the input tensor with shape (B, N, K).
+        The kernel values of the input tensor with shape (B, C, N, K).
     """
-    # add dimensions to x and centers to allow broadcasting
-    x = x.unsqueeze(2)
-    centers = centers.unsqueeze(0).unsqueeze(0)
+    assert x.dim() in (2, 3), (
+        "Input tensors must have 2 dimensions (B, N), or 3 (B, C, N)."
+    )
+    if x.dim() == 2: # add channel dimension
+        x = x.unsqueeze(1) # shape: (B, C, N) 
     
+    # add dimensions to x and centers to allow broadcasting
+    x = x.unsqueeze(-1) # shape: (B, C, N, 1)
+    centers = centers.unsqueeze(1).unsqueeze(1) # shape: (B, 1, 1, K)
+
     # compute kernel values
-    delta = centers[..., 1] - centers[..., 0] # bin width
+    delta = (centers[..., 1] - centers[..., 0])[..., None] # bin width (scalar)
     arg1 = scale * (x - (centers - delta / 2))
     arg2 = scale * (x - (centers + delta / 2))
     return torch.sigmoid(arg1) - torch.sigmoid(arg2)
@@ -90,15 +96,20 @@ def _kernel_binning(
     Parameters
     ----------
     x: Tensor
-        Input to bin with shape (B, N) (e.g., a flattened image).
+        Input to bin with shape (B, [C], N) (e.g., a flattened image).
     centers: Tensor
-        The centers of the histogram bins with shape (K).
+        The centers of the histogram bins with shape (B, K).
     method: Literal["gaussian", "sigmoid"]
         The method to compute the kernel binning.
     gaussian_sigma: float
         The standard deviation of the Gaussian kernel. Default is 0.5.
     sigmoid_scale: float
         The scaling factor of the sigmoid kernel. Default is 10.0.
+        
+    Returns
+    -------
+    Tensor
+        The kernel values of the input tensor with shape (B, [C], N, K).
     """
     if method == "gaussian":
         kernel_values = _gaussian_kernel_binning(x, centers, gaussian_sigma)
@@ -111,40 +122,77 @@ def _kernel_binning(
 
 
 def _get_marginal_pdf(
-    kernel_values: Tensor, density: bool = True, epsilon: float = 1e-10
+    binned_values: Tensor, density: bool = True, epsilon: float = 1e-10
 ) -> Tensor:
-    """Compute the marginal PDF from a variable's kernel binning values."""
+    """Compute the marginal PDF from a variable's kernel binning values.
+    
+    Parameters
+    ----------
+    binned_values: Tensor
+        The kernel binning values for the current batch with shape (B, [C], N, K).
+    density: bool, optional
+        Whether to normalize the histogram to get the PDF. Default is True.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+    
+    Returns
+    -------
+    Tensor
+        The marginal PDF of the variables in the current batch with shape (B, [C], K).
+    """
     # average over samples to get the soft histogram
-    hist = torch.mean(kernel_values, dim=1)
+    hist = torch.mean(binned_values, dim=-2) # shape: (B, [C], K)
     
     # normalize to get the PDF (optional)
     normalization = 1
     if density:
-        normalization = torch.sum(hist, dim=1).unsqueeze(1) + epsilon
+        normalization = torch.sum(hist, dim=-1).unsqueeze(-1) + epsilon
     return hist / normalization
 
 
 def _get_joint_pdf(
-    kernel_values1: Tensor,
-    kernel_values2: Tensor,
+    binned_values1: Tensor,
+    binned_values2: Tensor,
     density: bool = True,
     epsilon: float = 1e-10
 ) -> Tensor:
-    """Compute the joint PDF from two variables kernel binning values."""
+    """Compute the joint PDF from two variables kernel binning values.
+    
+    Parameters
+    ----------
+    binned_values1: Tensor
+        The kernel binning values for the first variable and the current batch,
+        with shape (B, [C], N, K).
+    binned_values2: Tensor
+        The kernel binning values for the second variable and the current batch,
+        with shape (B, [C], N, K).
+    density: bool, optional
+        Whether to normalize the histogram to get the PDF. Default is True.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+    
+    Returns
+    -------
+    Tensor
+        The joint PDF of the variables in the current batch with shape (B, [C], K, K).
+    """
     # calculate joint kernel values
-    joint_kernel_values = torch.matmul(kernel_values1.transpose(1, 2), kernel_values2)
+    joint_kernel_values = torch.matmul(
+        binned_values1.transpose(-2, -1), binned_values2
+    ) # shape: (B, [C], K, K)
 
     # normalize to get the PDF (optional)
     normalization = 1
     if density:
         normalization = torch.sum(
-            joint_kernel_values, dim=(1, 2)
-        ).view(-1, 1, 1) + epsilon
+            joint_kernel_values, dim=(-2, -1), keepdim=True
+        ) + epsilon
     return joint_kernel_values / normalization
 
 
+#TODO: implement normalized mutual information -> in [0, 1], more interpretable...
 def _compute_mutual_info(
-    marginal_x: Tensor, marginal_y: Tensor, joint: Tensor
+    marginal_1: Tensor, marginal_2: Tensor, joint: Tensor, epsilon: float = 1e-10
 ) -> float:
     """Compute the mutual information from marginal and joint distributions.
     
@@ -152,26 +200,106 @@ def _compute_mutual_info(
     
     Parameters
     ----------
-    marginal_x: Tensor
-        The marginal PDF of the first variable with shape (B, K).
-    marginal_y: Tensor
-        The marginal PDF of the second variable with shape (B, K).
+    marginal_1: Tensor
+        The marginal PDF of the first variable with shape (B, [C], K).
+    marginal_2: Tensor
+        The marginal PDF of the second variable with shape (B, [C], K).
     joint: Tensor
-        The joint PDF of the two variables with shape (B, K, K).
+        The joint PDF of the two variables with shape (B, [C], K, K).
+    epsilon: float, optional
+        A small value to avoid log(0) and division by 0. Default is 1e-10.
     
     Returns
     -------
     float
         The mutual information between the two variables described by the PDFs.
     """
-    px_py = marginal_x.unsqueeze(2) * marginal_y.unsqueeze(1)
-    non_zero = joint > 0.0
+    marginal_prod = marginal_1.unsqueeze(-1) * marginal_2.unsqueeze(-2) # shape: (B, [C], K, K)
+    joint[joint == 0.0] += epsilon # avoid log(0)
+    marginal_prod[marginal_prod == 0.0] += epsilon # avoid log(0)
     return torch.sum(
-        joint[non_zero] * (
-            torch.log(joint[non_zero]) - torch.log(px_py[non_zero])
-        )
+        joint * (torch.log(joint) - torch.log(marginal_prod)), dim=(-2, -1)
     )
 
+
+def pairwise_mutual_information(
+    inputs: Tensor,
+    num_bins: int,
+    method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: Optional[float] = 0.5,
+    sigmoid_scale: Optional[float] = 10.0,
+    epsilon: float = 1e-10   
+) -> Tensor:
+    """Calculate the (differentiable) pairwise mutual information between input
+    channels.
+
+    Parameters
+    ----------
+    inputs: Tensor
+        Input tensor with shape (B, C, Z, Y, X).
+    num_bins: int
+        The number of bins to use for the histogram.
+    method: Literal["gaussian", "sigmoid"]
+        The method to compute the soft histogram.
+    gaussian_sigma: float, optional
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is
+        recommended to get sharp binning functions. Default is 0.5.
+    sigmoid_scale: float, optional
+        The scaling factor of the sigmoid kernel. A value greater than 10 is
+        recommended to get sharp binning functions. Default is 10.0.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+        
+    Returns
+    -------
+    Tensor
+        The pairwise mutual information between input channels over a batch.
+        Hence, the output tensor has shape (B, C * (C - 1) / 2).
+    """
+    B, C, *spatial_dims = inputs.shape
+
+    # calculate the bin centers (same for all channels, diff for each batch item)
+    mins = torch.amin(inputs, dim=tuple(np.arange(1, len(spatial_dims) + 2)))
+    maxs = torch.amax(inputs, dim=tuple(np.arange(1, len(spatial_dims) + 2)))
+    bins = torch.stack([
+        torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
+        for min_, max_ in zip(mins, maxs)
+    ], dim=0) # shape: (B, K + 1)
+    bin_centers = (bins[:, :-1] + bins[:, 1:]) / 2 # shape: (B, K)
+    
+    # Create binnings for each channel
+    binned_values = _kernel_binning(
+        inputs.flatten(2),
+        bin_centers,
+        method,
+        gaussian_sigma=gaussian_sigma,
+        sigmoid_scale=sigmoid_scale
+    ) # shape: (B, C, N, K), K=num_bins, N=[Z]*Y*X
+    
+    # Create marginal PDFs for each channel
+    marginal_pdfs = _get_marginal_pdf(binned_values, epsilon) # shape: (B, C, K)
+    
+    # TODO: need to reshape binned_values with all pairwise combinations of channels
+    # Get all pairwise joint pdfs
+    joint_pdfs = {
+        f"{i}_{j}" : _get_joint_pdf(binned_values[:, i], binned_values[:, j], epsilon)
+        for i in range(C)
+        for j in range(i + 1, C)
+    } # shape: {C * C * (B, K, K)}
+    
+    # TODO: vectorize!
+    # Calculate the pairwise mutual information
+    return torch.stack([
+        _compute_mutual_info(
+            marginal_pdfs[:, i], marginal_pdfs[:, j], joint_pdfs[f"{i}_{j}"]
+        )
+        for i in range(C)
+        for j in range(i + 1, C)
+    ]).transpose(1, 0) # shape: (B, C * (C - 1) / 2)
+    
+    
+# -------------------------------------------------------------------------------------
+# Additional functions not used in the current implementation
 
 def soft_histogram(
     x: Tensor,
@@ -332,79 +460,3 @@ def mutual_information(
 
     # calculate the mutual information (using KL definition)
     return _compute_mutual_info(marginal_pdf1, marginal_pdf2, joint_pdf)
-    #TODO: implement normalized mutual information
-
-
-def pairwise_mutual_information(
-    inputs: Tensor,
-    num_bins: int,
-    method: Literal["gaussian", "sigmoid"],
-    gaussian_sigma: Optional[float] = 0.5,
-    sigmoid_scale: Optional[float] = 10.0,
-    epsilon: float = 1e-10    
-) -> list[float]:
-    """Calculate the (differentiable) pairwise mutual information between input
-    channels.
-
-    Parameters
-    ----------
-    inputs: Tensor
-        Input tensor with shape (B, C, Z, Y, X).
-    num_bins: int
-        The number of bins to use for the histogram.
-    method: Literal["gaussian", "sigmoid"]
-        The method to compute the soft histogram.
-    gaussian_sigma: float, optional
-        The standard deviation of the Gaussian kernel. A value in (0, 1] is
-        recommended to get sharp binning functions. Default is 0.5.
-    sigmoid_scale: float, optional
-        The scaling factor of the sigmoid kernel. A value greater than 10 is
-        recommended to get sharp binning functions. Default is 10.0.
-    epsilon: float, optional
-        A small value to avoid numerical instability. Default is 1e-10.
-        
-    Returns
-    -------
-    list[float]
-        The pairwise mutual information between input channels.
-    """
-    C = inputs.shape[1]
-    # calculate the bin centers
-    min_ = min([torch.min(inputs[:, i]) for i in range(C)])
-    max_ = max([torch.max(inputs[:, i]) for i in range(C)])
-    bins = torch.linspace(min_, max_, num_bins + 1, device=inputs[:, 0].device)
-    bin_centers = (bins[:-1] + bins[1:]) / 2
-    
-    # Create binnings for each channel
-    kernel_values = [
-        _kernel_binning(
-            inputs[:, i].flatten(1),
-            bin_centers,
-            method,
-            gaussian_sigma=gaussian_sigma,
-            sigmoid_scale=sigmoid_scale
-        )
-        for i in range(C)
-    ]
-    
-    # Create marginal PDFs for each channel
-    marginal_pdfs = [
-        _get_marginal_pdf(kernel_values[i], epsilon)
-        for i in range(C)
-    ]
-    
-    # Get all pairwise joint pdfs
-    joint_pdfs = {
-        f"{i}_{j}" : _get_joint_pdf(kernel_values[i], kernel_values[j], epsilon)
-        for i in range(C)
-        for j in range(i + 1, C)
-    }
-    
-    # Calculate the pairwise mutual information
-    return [
-        _compute_mutual_info(
-            marginal_pdfs[i], marginal_pdfs[j], joint_pdfs[f"{i}_{j}"]
-        )
-        for i in range(C)
-        for j in range(i + 1, C)
-    ]

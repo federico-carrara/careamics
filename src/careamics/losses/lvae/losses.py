@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import torch
 
+from careamics.losses.mutual_info import pairwise_mutual_information
 from careamics.losses.lvae.loss_utils import free_bits_kl, get_kl_weight
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
@@ -15,7 +16,7 @@ from careamics.models.lvae.likelihoods import (
 )
 
 if TYPE_CHECKING:
-    from careamics.config import LVAELossConfig
+    from careamics.config import LVAELossConfig, MutualInfoLossConfig
 
 Likelihood = Union[LikelihoodModule, GaussianLikelihood, NoiseModelLikelihood]
 
@@ -24,7 +25,7 @@ def get_reconstruction_loss(
     reconstruction: torch.Tensor,
     target: torch.Tensor,
     likelihood_obj: Likelihood,
-) -> dict[str, torch.Tensor]:
+) -> torch.Tensor:
     """Compute the reconstruction loss (negative log-likelihood).
 
     Parameters
@@ -280,6 +281,70 @@ def _get_kl_divergence_loss_denoisplit(
         free_bits_coeff=1.0,
         img_shape=img_shape,
     )
+    
+
+def get_mutual_info_loss(
+    inputs: torch.Tensor,
+    mi_loss_type: Literal["hist", "MINE"],
+    num_bins: int,
+    binning_method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: float,
+    sigmoid_scale: float,
+    epsilon: float,
+) -> torch.Tensor:
+    """Compute the mutual information loss, i.e., the mutual information
+    between pairs of channels in the input tensor.
+    
+    Recall that our objective is to minimize mutual information between channels
+    to force them to show independent and diverse features.
+    
+    Parameters
+    ----------
+    inputs : torch.Tensor
+        The input tensor for which to compute the mutual information loss. Shape is
+        (B, C, [Z], Y, X).
+    mi_loss_type : Literal["hist", "MINE"]
+        The type of mutual information implementation, either using histograms to
+        estimate joint and marginal distributions of input data or using MINE algorithm.
+    num_bins : int
+        The number of bins for the histogram approximating input distribution. A good
+        rule of thumb is to set the number of bins approximately equal to 1/3 of the
+        square root of the number of samples (e.g., for an image 100x100 a sensible
+        values is ~30).
+    binning_method : Literal["gaussian", "sigmoid"]
+        Methods for differentiable binning in the histogram approach.
+    gaussian_sigma : float
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is recommended
+        to get sharper binning functions and, hence, a better estimate of the mutual
+        information.
+    sigmoid_scale : float
+        The scaling factor of the sigmoid kernel. A value greater than 10 is recommended
+        to get sharper binning functions and, hence, a better estimate of the mutual
+        information.
+    epsilon : float
+        Small value to ensure numerical stability.
+    
+    Returns
+    -------
+    mutual_info_loss : torch.Tensor
+        The mutual information loss. Shape is (C * (C-1) / 2).
+    """
+    if mi_loss_type == "hist":
+        mutual_info = pairwise_mutual_information(
+            inputs=inputs,
+            num_bins=num_bins,
+            method=binning_method,
+            gaussian_sigma=gaussian_sigma,
+            sigmoid_scale=sigmoid_scale,
+            epsilon=epsilon,
+        ) # shape: (B, C * (C-1) / 2)
+    else:
+        raise NotImplementedError("MINE mutual info loss not implemented yet!")
+    
+    # average over batch dimension
+    mutual_info_loss = mutual_info.mean(dim=0) # shape: (C * (C-1) / 2)
+    
+    return mutual_info_loss.to(inputs.device)
 
 
 # TODO: @melisande-c suggested to refactor this as a class (see PR #208)
@@ -534,9 +599,11 @@ def lambdasplit_loss(
     Parameters
     ----------
     model_outputs : tuple[torch.Tensor, dict[str, Any]]
-        Tuple containing the model predictions (shape is (B, F, [Z], Y, X))
-        and the top-down layer data (e.g., sampled latents, KL-loss values, etc.).
-        F is the number of fluorophores to unmix.
+        Tuple containing the re-mixed images (shape is `(B, W, [Z], Y, X)`), the
+        unmixed images (shape is `(B, F, [Z], Y, X)`) and the top-down layer data
+        (e.g., sampled latents, KL-loss values, etc.). Note that `F` is the number
+        of fluorophores to unmix and `W` is the number of spectral bands in the input
+        image.
     targets : torch.Tensor
         The target image used to compute the reconstruction loss. Shape is
         (B, F, [Z], Y, X).
@@ -553,11 +620,11 @@ def lambdasplit_loss(
         A dictionary containing the overall loss `["loss"]`, the reconstruction loss
         `["reconstruction_loss"]`, and the KL divergence loss `["kl_loss"]`.
     """
-    predictions, _, td_data = model_outputs
+    reconstructions, unmixed, td_data = model_outputs
 
     # Reconstruction loss computation
     recons_loss = config.reconstruction_weight * get_reconstruction_loss(
-        reconstruction=predictions,
+        reconstruction=reconstructions,
         target=targets,
         likelihood_obj=gaussian_likelihood,
     )
@@ -580,8 +647,22 @@ def lambdasplit_loss(
         free_bits_coeff=config.kl_params.free_bits_coeff,
         img_shape=targets.shape[2:]
     ) * kl_weight
+    
+    # Mutual Info loss computation (optional)
+    mutual_info_loss = 0.0
+    if config.mutual_info_weight > 0.0:
+        mutual_info_loss = get_mutual_info_loss(
+            inputs=unmixed,
+            mi_loss_type=config.mutual_info_params.loss_type,
+            num_bins=config.mutual_info_params.num_bins,
+            binning_method=config.mutual_info_params.binning_method,
+            gaussian_sigma=config.mutual_info_params.gaussian_sigma,
+            sigmoid_scale=config.mutual_info_params.sigmoid_scale,
+            epsilon=config.mutual_info_params.epsilon,
+        )
+        mutual_info_loss = config.mutual_info_weight * mutual_info_loss
 
-    net_loss = recons_loss + kl_loss
+    net_loss = recons_loss + kl_loss + mutual_info_loss.mean()
     output = {
         "loss": net_loss,
         "reconstruction_loss": (
@@ -591,6 +672,17 @@ def lambdasplit_loss(
         ),
         "kl_loss": kl_loss.detach(),
     }
+    # add mutual information loss values
+    idxs = [
+        f"{i}-{j}" 
+        for i in range(unmixed.shape[1]) for j in range(i + 1, unmixed.shape[1])
+    ]
+    mi_loss_dict = {
+        f"mi_loss_ch_{idx}": mi_loss
+        for idx, mi_loss in zip(idxs, mutual_info_loss.detach())
+    }
+    output.update(mi_loss_dict)
+    
     # https://github.com/openai/vdvae/blob/main/train.py#L26
     if torch.isnan(net_loss).any():
         return None
