@@ -198,22 +198,23 @@ class InMemoryDataset(Dataset):
                 self.input_targets, np.ndarray
             ):
                 return prepare_patches_supervised_array(
-                    self.inputs,
-                    self.axes,
-                    self.input_targets,
-                    self.patch_size,
-                    self.norm_strategy,
+                    data=self.inputs,
+                    axes=self.axes,
+                    data_target=self.input_targets,
+                    patch_size=self.patch_size,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
-                    self.inputs,
-                    self.input_targets,
-                    self.axes,
-                    self.patch_size,
-                    self.norm_strategy,
-                    self.read_source_func,
-                    self.read_source_kwargs,
-                    self.norm_strategy,
+                    train_files=self.inputs,
+                    target_files=self.input_targets,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    read_source_func=self.read_source_func,
+                    read_source_kwargs=self.read_source_kwargs,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             else:
                 raise ValueError(
@@ -224,19 +225,21 @@ class InMemoryDataset(Dataset):
         else:
             if isinstance(self.inputs, np.ndarray):
                 return prepare_patches_unsupervised_array(
-                    self.inputs,
-                    self.axes,
-                    self.patch_size,
-                    self.norm_strategy,
+                    data=self.inputs,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             else:
                 return prepare_patches_unsupervised(
-                    self.inputs,
-                    self.axes,
-                    self.patch_size,
-                    self.read_source_func,
-                    self.read_source_kwargs,
-                    self.norm_strategy,
+                    train_files=self.inputs,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    read_source_func=self.read_source_func,
+                    read_source_kwargs=self.read_source_kwargs,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
 
     def __len__(self) -> int:
