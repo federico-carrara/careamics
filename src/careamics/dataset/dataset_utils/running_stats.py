@@ -8,7 +8,7 @@ from .dataset_utils import Stats
 
 
 def _compute_min_max_stats(
-    image: NDArray, 
+    data: NDArray, 
     strategy: Literal["channel-wise", "global"] = "channel-wise"
 ) -> tuple[NDArray, NDArray]:
     """
@@ -16,8 +16,8 @@ def _compute_min_max_stats(
 
     Parameters
     ----------
-    image : NDArray
-        Input array. Expected input shape is (S, C, (Z), Y, X).
+    data : NDArray
+        Input data array. Expected input shape is (S, C, (Z), Y, X).
     norm_strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
 
@@ -28,16 +28,16 @@ def _compute_min_max_stats(
     """
     if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
-        axes = tuple(np.delete(np.arange(image.ndim), 1))
+        axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.min(image, axis=axes), # (C,)
-            np.max(image, axis=axes) # (C,)
+            np.min(data, axis=axes), # (C,)
+            np.max(data, axis=axes) # (C,)
         )
     elif strategy == "global":
-        axes = tuple(np.arange(image.ndim))
+        axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.min(image, axis=axes))[None], # (1,) 
-            np.asarray(np.max(image, axis=axes))[None] # (1,)
+            np.asarray(np.min(data, axis=axes))[None], # (1,) 
+            np.asarray(np.max(data, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -50,7 +50,7 @@ def _compute_min_max_stats(
 
 
 def _compute_mean_std_stats(
-    image: NDArray, 
+    data: NDArray, 
     strategy: Literal["channel-wise", "global"] = "channel-wise"
 ) -> tuple[NDArray, NDArray]:
     """
@@ -58,8 +58,8 @@ def _compute_mean_std_stats(
 
     Parameters
     ----------
-    image : NDArray
-        Input array. Expected input shape is (S, C, (Z), Y, X)
+    data : NDArray
+        Input data array. Expected input shape is (S, C, (Z), Y, X)
     norm_strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
 
@@ -70,16 +70,16 @@ def _compute_mean_std_stats(
     """
     if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
-        axes = tuple(np.delete(np.arange(image.ndim), 1))
+        axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.mean(image, axis=axes), # (C,)
-            np.std(image, axis=axes) # (C,)
+            np.mean(data, axis=axes), # (C,)
+            np.std(data, axis=axes) # (C,)
         )
     elif strategy == "global":
-        axes = tuple(np.arange(image.ndim))
+        axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.mean(image, axis=axes))[None], # (1,)
-            np.asarray(np.std(image, axis=axes))[None] # (1,)
+            np.asarray(np.mean(data, axis=axes))[None], # (1,)
+            np.asarray(np.std(data, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -92,7 +92,7 @@ def _compute_mean_std_stats(
 
 
 def compute_normalization_stats(
-    image: NDArray,
+    data: NDArray,
     method: Literal["normalize", "standardize"],
     strategy: Literal["channel-wise", "global"] = "channel-wise",
 ) -> Stats:
@@ -114,9 +114,9 @@ def compute_normalization_stats(
     """
     stats = {"means": None, "stds": None, "mins": None, "maxs": None}
     if method == "normalize":
-        stats["mins"], stats["maxs"] = _compute_min_max_stats(image, strategy)
+        stats["mins"], stats["maxs"] = _compute_min_max_stats(data, strategy)
     elif method == "standardize":
-        stats["means"], stats["stds"] = _compute_mean_std_stats(image, strategy)
+        stats["means"], stats["stds"] = _compute_mean_std_stats(data, strategy)
     else:
         raise ValueError(
             (
