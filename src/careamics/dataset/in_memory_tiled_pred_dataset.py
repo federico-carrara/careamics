@@ -12,7 +12,7 @@ from careamics.transforms import Compose
 
 from ..config import InferenceConfig
 from ..config.tile_information import TileInformation
-from ..config.transformations import NormalizeModel
+from ..config.transformations import NormalizeModel, StandardizeModel
 from .tiling import prepare_tiles, prepare_tiles_array
 
 
@@ -70,8 +70,11 @@ class InMemoryTiledPredDataset(Dataset):
         self.axes = self.pred_config.axes
         self.tile_size = prediction_config.tile_size
         self.tile_overlap = prediction_config.tile_overlap
+        self.norm_type = self.pred_config.norm_type
         self.image_means = self.pred_config.image_means
         self.image_stds = self.pred_config.image_stds
+        self.image_mins = self.pred_config.image_mins
+        self.image_maxs = self.pred_config.image_maxs
         
         # read function
         self.read_source_func = read_source_func
@@ -82,11 +85,18 @@ class InMemoryTiledPredDataset(Dataset):
         self.data = self._prepare_tiles()
 
         # get transforms
-        self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(image_means=self.image_means, image_stds=self.image_stds)
-            ],
-        )
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_mins,
+                image_maxs=self.image_maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_means,
+                image_stds=self.image_stds,
+            )
+        
+        self.patch_transform = Compose(transform_list=[norm_transform],)
 
     def _prepare_tiles(self) -> list[tuple[NDArray, TileInformation]]:
         """

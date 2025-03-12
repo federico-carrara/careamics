@@ -117,7 +117,7 @@ class InMemoryDataset(Dataset):
             )
             
         self.patch_transform = Compose(
-            transform_list=[norm_transform] + data_config.transforms
+            transform_list=[norm_transform] + self.data_config.transforms
         )
     
     def _set_min_max_stats(self, image_stats: Stats, target_stats: Stats) -> None:

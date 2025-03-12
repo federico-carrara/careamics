@@ -10,7 +10,7 @@ from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
 from ..config import InferenceConfig
-from ..config.transformations import NormalizeModel
+from ..config.transformations import NormalizeModel, StandardizeModel
 from .dataset_utils import reshape_array
 
 
@@ -49,8 +49,11 @@ class InMemoryPredDataset(Dataset):
         self.pred_config = prediction_config
         self.input_array = inputs
         self.axes = self.pred_config.axes
+        self.norm_type = self.pred_config.norm_type
         self.image_means = self.pred_config.image_means
         self.image_stds = self.pred_config.image_stds
+        self.image_mins = self.pred_config.image_mins
+        self.image_maxs = self.pred_config.image_maxs
         
         # read function
         self.read_source_func = read_source_func
@@ -60,11 +63,18 @@ class InMemoryPredDataset(Dataset):
         self.data = reshape_array(self.input_array, self.axes)
 
         # get transforms
-        self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(image_means=self.image_means, image_stds=self.image_stds)
-            ],
-        )
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_mins,
+                image_maxs=self.image_maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_means,
+                image_stds=self.image_stds,
+            )
+        
+        self.patch_transform = Compose(transform_list=[norm_transform],)
 
     def __len__(self) -> int:
         """
