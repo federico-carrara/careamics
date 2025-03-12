@@ -1,4 +1,4 @@
-"""Pydantic model for the Normalize transform."""
+"""Pydantic model for the `Standardize` transform."""
 
 from typing import Literal, Optional
 
@@ -16,7 +16,7 @@ class StandardizeModel(TransformModel):
 
     Attributes
     ----------
-    name : Literal["Normalize"]
+    name : Literal["Standardize"]
         Name of the transformation.
     strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
@@ -35,7 +35,7 @@ class StandardizeModel(TransformModel):
         validate_assignment=True,
     )
 
-    name: Literal["Normalize"] = "Normalize"
+    name: Literal["Standardize"] = "Standardize"
     strategy: Literal["channel-wise", "global"] = "channel-wise"
     image_means: list = Field(..., min_length=0, max_length=32)
     image_stds: list = Field(..., min_length=0, max_length=32)

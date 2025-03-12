@@ -258,6 +258,7 @@ class RunningMinMaxStatistics:
         array : NDArray
             Input array of shape (S, C, (Z), Y, X).
         """
+        # TODO: use quantiles!
         axes = tuple(np.delete(np.arange(array.ndim), 1))
         if self.mins is None:
             self.mins = np.min(array, axis=axes) # (C,)

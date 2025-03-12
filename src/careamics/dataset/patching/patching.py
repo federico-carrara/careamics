@@ -16,6 +16,7 @@ from .sequential_patching import extract_patches_sequential
 
 logger = get_logger(__name__)
 
+# TODO: use quantiles for normalization!
 
 @dataclass
 class PatchedOutput:
