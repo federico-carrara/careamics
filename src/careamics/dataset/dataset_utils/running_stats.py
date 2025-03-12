@@ -243,6 +243,30 @@ class WelfordStatistics:
         return finalize_iterative_stats(self.count, self.mean, self.m2)
 
 
+class RunningMinMaxStatistics:
+    """Compute running min and max statistics."""
+    
+    def __init__(self) -> None:
+        self.mins = None
+        self.maxs = None
+    
+    def update(self, array: NDArray) -> None:
+        """Update the running min and max statistics.
+        
+        Parameters
+        ----------
+        array : NDArray
+            Input array of shape (S, C, (Z), Y, X).
+        """
+        axes = tuple(np.delete(np.arange(array.ndim), 1))
+        if self.mins is None:
+            self.mins = np.min(array, axis=axes) # (C,)
+            self.maxs = np.max(array, axis=axes) # (C,)
+        else:
+            self.mins = np.minimum(self.mins, np.min(array, axis=axes)) # (C,)
+            self.maxs = np.maximum(self.maxs, np.max(array, axis=axes)) # (C,)
+
+
 # from multiprocessing import Value
 # from typing import tuple
 

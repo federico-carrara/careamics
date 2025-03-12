@@ -18,8 +18,8 @@ from careamics.transforms import Compose
 
 from ..utils.logging import get_logger
 from .dataset_utils import iterate_over_files
-from .dataset_utils.running_stats import WelfordStatistics
-from .patching.patching import Stats
+from .dataset_utils.running_stats import RunningMinMaxStatistics, WelfordStatistics
+from .dataset_utils.dataset_utils import Stats
 from .patching.random_patching import extract_patches_random
 
 logger = get_logger(__name__)
@@ -78,40 +78,13 @@ class PathIterableDataset(IterableDataset):
         self.target_files = target_files
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        self.norm_type = self.data_config.norm_type
+        # FIXME: `norm_strategy` not defined here...
 
         # compute mean and std over the dataset
-        # only checking the image_mean because the DataConfig class ensures that
-        # if image_mean is provided, image_std is also provided
-        if not self.data_config.image_means:
-            self.image_stats, self.target_stats = self._calculate_mean_and_std()
-            logger.info(
-                f"Computed dataset mean: {self.image_stats.means},"
-                f"std: {self.image_stats.stds}"
-            )
+        
 
-            # update the mean in the config
-            self.data_config.set_means_and_stds(
-                image_means=self.image_stats.means,
-                image_stds=self.image_stats.stds,
-                target_means=(
-                    list(self.target_stats.means)
-                    if self.target_stats.means is not None
-                    else None
-                ),
-                target_stds=(
-                    list(self.target_stats.stds)
-                    if self.target_stats.stds is not None
-                    else None
-                ),
-            )
-
-        else:
-            # if mean and std are provided in the config, use them
-            self.image_stats, self.target_stats = (
-                Stats(self.data_config.image_means, self.data_config.image_stds),
-                Stats(self.data_config.target_means, self.data_config.target_stds),
-            )
-
+        # FIXME
         # create transform composed of normalization and other transforms
         self.patch_transform = Compose(
             transform_list=[
@@ -126,12 +99,11 @@ class PathIterableDataset(IterableDataset):
         )
 
     def _calculate_mean_and_std(self) -> tuple[Stats, Stats]:
-        """
-        Calculate mean and std of the dataset.
+        """Calculate channel-wise mean and std of the dataset.
 
         Returns
         -------
-        tuple of Stats and optional Stats
+        tuple[Stats, Stats]
             Data classes containing the image and target statistics.
         """
         num_samples = 0
@@ -168,11 +140,125 @@ class PathIterableDataset(IterableDataset):
             target_means, target_stds = target_stats.finalize()
 
             return (
-                Stats(image_means, image_stds),
-                Stats(np.array(target_means), np.array(target_stds)),
+                Stats(means=image_means, stds=image_stds),
+                Stats(means=target_means, stds=target_stds),
             )
         else:
-            return Stats(image_means, image_stds), Stats(None, None)
+            return Stats(means=image_means, stds=image_stds), Stats()
+        
+    def _calculate_min_and_max(self) -> tuple[Stats, Stats]:
+        """Calculate channel-wise min and max of the dataset.
+
+        Returns
+        -------
+        tuple[Stats, Stats]
+            Data classes containing the image and target statistics.
+        """
+        num_samples = 0
+        image_stats = RunningMinMaxStatistics()
+        if self.target_files is not None:
+            target_stats = RunningMinMaxStatistics()
+
+        for sample, target, _ in tqdm(
+            iterate_over_files(
+                self.data_config,
+                self.data_files,
+                self.target_files,
+                self.read_source_func,
+                self.read_source_kwargs,
+            ),
+            desc="Calculating data stats",
+            total=len(self.data_files),
+        ):            
+            image_stats.update(sample)
+
+            # update the target statistics if target is available
+            if target is not None:
+                target_stats.update(target)
+
+            num_samples += 1
+
+        if num_samples == 0:
+            raise ValueError("No samples found in the dataset.")
+
+        # Get statistics
+        image_mins, image_maxs = image_stats.mins, image_stats.maxs
+
+        if target is not None:
+            target_mins, target_maxs = target_stats.mins, target_stats.maxs
+            return (
+                Stats(mins=image_mins, maxs=image_maxs),
+                Stats(mins=target_mins, maxs=target_maxs),
+            )
+        else:
+            return Stats(mins=image_mins, maxs=image_maxs), Stats()
+        
+    def _set_mean_std_stats(self) -> None:
+        """Set the mean and std image statistics."""
+        if not self.data_config.image_means:
+            self.image_stats, self.target_stats = self._calculate_mean_and_std()
+            logger.info(
+                f"Computed dataset mean: {self.image_stats.means},"
+                f"std: {self.image_stats.stds}"
+            )
+
+            # update the mean in the config
+            self.data_config.set_means_and_stds(
+                image_means=self.image_stats.means,
+                image_stds=self.image_stats.stds,
+                target_means=self.target_stats.means,
+                target_stds=self.target_stats.stds,
+            )
+
+        else:
+            # if mean and std are provided in the config, use them
+            self.image_stats, self.target_stats = (
+                Stats(
+                    means=self.data_config.image_means,
+                    stds=self.data_config.image_stds
+                ),
+                Stats(
+                    means=self.data_config.target_means,
+                    stds=self.data_config.target_stds
+                ),
+            )
+        
+    def _set_min_max_stats(self) -> None:
+        """Set the min and max image statistics."""
+        if self.data_config.image_mins is None:
+            self.image_stats, self.target_stats = self._calculate_min_and_max()
+            logger.info(
+                f"Computed dataset mean: {self.image_stats.means},"
+                f"std: {self.image_stats.stds}"
+            )
+
+            # update min and maxs in configuration
+            self.data_config.set_mins_and_maxs(
+                image_mins=self.image_stats.means,
+                image_maxs=self.image_stats.stds,
+                target_mins=self.target_stats.means,
+                target_maxs=self.target_stats
+            )
+        
+        else:
+            # if min and max are provided in the config, use them
+            self.image_stats, self.target_stats = (
+                Stats(
+                    mins=self.data_config.image_mins,
+                    maxs=self.data_config.image_maxs
+                ),
+                Stats(
+                    mins=self.data_config.target_mins,
+                    maxs=self.data_config.target_maxs
+                ),
+            )
+    
+    def _set_image_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the image statistics."""
+        if self.norm_type == "normalize":
+            self._set_min_max_stats(image_stats, target_stats)
+        elif self.norm_type == "standardize":
+            self._set_mean_std_stats(image_stats, target_stats) 
 
     def __iter__(
         self,
