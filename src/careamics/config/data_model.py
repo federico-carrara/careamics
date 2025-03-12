@@ -398,10 +398,10 @@ class DataConfig(BaseModel):
 
     def set_means_and_stds(
         self,
-        image_means: Union[NDArray, tuple, list, None],
-        image_stds: Union[NDArray, tuple, list, None],
-        target_means: Optional[Union[NDArray, tuple, list, None]] = None,
-        target_stds: Optional[Union[NDArray, tuple, list, None]] = None,
+        image_means: Optional[Union[NDArray, tuple, list]],
+        image_stds: Optional[Union[NDArray, tuple, list]],
+        target_means: Optional[Union[NDArray, tuple, list]] = None,
+        target_stds: Optional[Union[NDArray, tuple, list]] = None,
     ) -> None:
         """
         Set mean and standard deviation of the data across channels.
