@@ -297,7 +297,31 @@ def pairwise_mutual_information(
         for j in range(i + 1, C)
     ]).transpose(1, 0) # shape: (B, C * (C - 1) / 2)
     
+
+def mosaic_pairwise_mutual_information(
+    inputs: Tensor,
+    ssim_percentile: float,
+    num_bins: int,
+    method: Literal["gaussian", "sigmoid"],
+    gaussian_sigma: Optional[float] = 0.5,
+    sigmoid_scale: Optional[float] = 10.0,
+    epsilon: float = 1e-10
+) -> Tensor:
+    """Calculate the (differentiable) pairwise mutual information between input
+    channels using the MOSAIC approach, i.e., only computing it for the patches in the
+    current batch whose SSIM (w.r.t., other channels) is below a given percentile.
     
+    This approach is useful to focus on the most informative patches for the mutual
+    information computation and leave out meaningless patches (e.g., background).
+    
+    Percentiles are calculated over the SSIM values for a batch and different channels
+    pairs are treated separately.
+    
+    Parameters
+    ----------
+    """
+    pass
+
 # -------------------------------------------------------------------------------------
 # Additional functions not used in the current implementation
 
