@@ -1,12 +1,44 @@
 """Dataset utilities."""
 
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 from careamics.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class Stats:
+    """Dataclass to store statistics."""
+
+    means: Optional[Union[NDArray, tuple, list]] = None
+    """Mean of the data across channels."""
+
+    stds: Optional[Union[NDArray, tuple, list]] = None
+    """Standard deviation of the data across channels."""
+    
+    mins: Optional[Union[NDArray, tuple, list]] = None
+    """Minimum values of the data across channels."""
+    
+    maxs: Optional[Union[NDArray, tuple, list]] = None
+    """Maximum values of the data across channels."""
+
+    def get_statistics(self) -> tuple[list[float], list[float]]:
+        """Return the means and standard deviations.
+
+        Returns
+        -------
+        tuple of two lists of floats
+            Means and standard deviations.
+        """
+        if self.means is None or self.stds is None:
+            return [], []
+
+        return list(self.means), list(self.stds)
 
 
 def _get_shape_order(

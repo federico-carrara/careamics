@@ -105,13 +105,16 @@ class DataConfig(BaseModel):
 
     batch_size: int = Field(default=1, ge=1, validate_default=True)
     """Batch size for training."""
-
-    # Optional fields
+    
+    # --- Statistics for normalization ---
+    norm_type: Literal["normalize", "standardize"] = "standardize"
+    """Normalization type, either min-max normalization or standardization using mean
+    and standard deviation."""
+    
     norm_strategy: Optional[Literal["channel-wise", "global"]] = "channel-wise"
     """Normalization strategy, either channel-wise or global. It is particularly
     important in the case of multi-channel data."""
     
-    # TODO: list of floats instead of array for serialization?
     image_means: Optional[list[Float]] = Field(
         default=None, min_length=0, max_length=32
     )
@@ -149,22 +152,9 @@ class DataConfig(BaseModel):
     """Quantile range for min-max normalization. If a single value is provided, the
     range will be [min_quantile, 1 - min_quantile]."""
 
-    transforms: list[TRANSFORMS_UNION] = Field(
-        default=[
-            {
-                "name": SupportedTransform.XY_FLIP.value,
-            },
-            {
-                "name": SupportedTransform.XY_RANDOM_ROTATE90.value,
-            },
-            {
-                "name": SupportedTransform.N2V_MANIPULATE.value,
-            },
-        ],
-        validate_default=True,
-    )
+    transforms: list[TRANSFORMS_UNION] = Field(default_factory=list)
     """List of transformations to apply to the data, available transforms are defined
-    in SupportedTransform. The default values are set for Noise2Void."""
+    in SupportedTransform."""
 
     dataloader_params: Optional[dict] = Field(default=None, exclude=True)
     """Dictionary of PyTorch dataloader parameters."""

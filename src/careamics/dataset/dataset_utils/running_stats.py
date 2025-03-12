@@ -4,21 +4,62 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from .dataset_utils import Stats
 
-def compute_normalization_stats(
+
+def _compute_min_max_stats(
+    image: NDArray, 
+    strategy: Literal["channel-wise", "global"] = "channel-wise"
+) -> tuple[NDArray, NDArray]:
+    """
+    Compute min and max of an array.
+
+    Parameters
+    ----------
+    image : NDArray
+        Input array. Expected input shape is (S, C, (Z), Y, X).
+    norm_strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
+
+    Returns
+    -------
+    tuple of (list of floats, list of floats)
+        Lists of min and max values per channel.
+    """
+    if strategy == "channel-wise":
+        # Define the list of axes excluding the channel axis
+        axes = tuple(np.delete(np.arange(image.ndim), 1))
+        stats = (
+            np.min(image, axis=axes), # (C,)
+            np.max(image, axis=axes) # (C,)
+        )
+    elif strategy == "global":
+        axes = tuple(np.arange(image.ndim))
+        stats = (
+            np.asarray(np.min(image, axis=axes))[None], # (1,) 
+            np.asarray(np.max(image, axis=axes))[None] # (1,)
+        )
+    else:
+        raise ValueError(
+            (
+                f"Unknown normalization strategy: {strategy}."
+                "Available ones are 'channel-wise' and 'global'."
+            )
+        )
+    return stats
+
+
+def _compute_mean_std_stats(
     image: NDArray, 
     strategy: Literal["channel-wise", "global"] = "channel-wise"
 ) -> tuple[NDArray, NDArray]:
     """
     Compute mean and standard deviation of an array.
 
-    Expected input shape is (S, C, (Z), Y, X). The mean and standard deviation are
-    computed per channel.
-
     Parameters
     ----------
     image : NDArray
-        Input array.
+        Input array. Expected input shape is (S, C, (Z), Y, X)
     norm_strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
 
@@ -27,7 +68,6 @@ def compute_normalization_stats(
     tuple of (list of floats, list of floats)
         Lists of mean and standard deviation values per channel.
     """
-    # TODO: this needs to be fixed a little bit
     if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(image.ndim), 1))
@@ -38,7 +78,7 @@ def compute_normalization_stats(
     elif strategy == "global":
         axes = tuple(np.arange(image.ndim))
         stats = (
-            np.asarray(np.mean(image, axis=axes))[None], # (1,) 
+            np.asarray(np.mean(image, axis=axes))[None], # (1,)
             np.asarray(np.std(image, axis=axes))[None] # (1,)
         )
     else:
@@ -49,6 +89,42 @@ def compute_normalization_stats(
             )
         )
     return stats
+
+
+def compute_normalization_stats(
+    image: NDArray,
+    method: Literal["normalize", "standardize"],
+    strategy: Literal["channel-wise", "global"] = "channel-wise",
+) -> Stats:
+    """Compute normalization statistics on the input array.
+    
+    Parameters
+    ----------
+    image : NDArray
+        Input array. Expected input shape is (S, C, (Z), Y, X).
+    norm_type : Literal["normalize", "standardize"]
+        Normalization type.
+    strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
+        
+    Returns
+    -------
+    Stats
+        Normalization statistics.
+    """
+    stats = {"means": None, "stds": None, "mins": None, "maxs": None}
+    if method == "normalize":
+        stats["mins"], stats["maxs"] = _compute_min_max_stats(image, strategy)
+    elif method == "standardize":
+        stats["means"], stats["stds"] = _compute_mean_std_stats(image, strategy)
+    else:
+        raise ValueError(
+            (
+                f"Unknown normalization type: {method}."
+                "Available ones are 'normalize' and 'standardize'."
+            )
+        )
+    return Stats(**stats)
 
 
 def update_iterative_stats(
