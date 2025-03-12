@@ -47,7 +47,7 @@ class InMemoryPredDataset(Dataset):
             If data_path is not a directory.
         """
         self.pred_config = prediction_config
-        self.inputs = inputs
+        self.input_array = inputs
         self.axes = self.pred_config.axes
         self.image_means = self.pred_config.image_means
         self.image_stds = self.pred_config.image_stds
