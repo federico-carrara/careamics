@@ -79,6 +79,7 @@ class InMemoryDataset(Dataset):
         self.input_targets = input_target
         self.axes = self.data_config.axes
         self.patch_size = self.data_config.patch_size
+        self.norm_type = self.data_config.norm_type
         self.norm_strategy = self.data_config.norm_strategy
 
         # read function
@@ -95,10 +96,57 @@ class InMemoryDataset(Dataset):
         # unpack the dataclass
         self.data = patches_data.patches
         self.data_targets = patches_data.targets
-
+        
         # set image statistics
+        self._set_image_stats(patches_data.image_stats, patches_data.target_stats)
+
+        # get transforms
+        self.patch_transform = Compose(
+            transform_list=[
+                NormalizeModel(
+                    strategy=self.norm_strategy,
+                    image_means=self.image_stats.means,
+                    image_stds=self.image_stats.stds,
+                    target_means=self.target_stats.means,
+                    target_stds=self.target_stats.stds,
+                )
+            ]
+            + self.data_config.transforms,
+        )
+    
+    def _set_min_max_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the min and max image statistics."""
+        if self.data_config.image_mins is None:
+            self.image_stats = image_stats
+            logger.info(
+                f"Computed dataset mean: {self.image_stats.means}, "
+                f"std: {self.image_stats.stds}"
+            )
+        else:
+            self.image_stats = Stats(
+                self.data_config.image_mins, self.data_config.image_maxs
+            )
+
+        # set target statistics
+        if self.data_config.target_mins is None:
+            self.target_stats = target_stats
+        else:
+            self.target_stats = Stats(
+                self.data_config.target_mins, self.data_config.target_maxs
+            )
+
+        # update min and maxs in configuration
+        self.data_config.set_mins_and_maxs(
+            image_mins=self.image_stats.means,
+            image_maxs=self.image_stats.stds,
+            target_mins=self.target_stats.means,
+            target_maxs=self.target_stats
+        )
+    
+    def _set_mean_std_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the mean and std image statistics."""
         if self.data_config.image_means is None:
-            self.image_stats = patches_data.image_stats
+            self.image_stats = image_stats
             logger.info(
                 f"Computed dataset mean: {self.image_stats.means}, "
                 f"std: {self.image_stats.stds}"
@@ -110,34 +158,26 @@ class InMemoryDataset(Dataset):
 
         # set target statistics
         if self.data_config.target_means is None:
-            self.target_stats = patches_data.target_stats
+            self.target_stats = target_stats
         else:
             self.target_stats = Stats(
                 self.data_config.target_means, self.data_config.target_stds
             )
 
         # update mean and std in configuration
-        # the object is mutable and should then be recorded in the CAREamist obj
         self.data_config.set_means_and_stds(
             image_means=self.image_stats.means,
             image_stds=self.image_stats.stds,
             target_means=self.target_stats.means,
             target_stds=self.target_stats.stds,
         )
-        # get transforms
-        self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(
-                    strategy=self.norm_strategy,
-                    image_means=self.image_stats.means,
-                    image_stds=self.image_stats.stds,
-                    target_means=self.target_stats.means,
-                    target_stds=self.target_stats.stds,
-                    
-                )
-            ]
-            + self.data_config.transforms,
-        )
+    
+    def _set_image_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the image statistics."""
+        if self.norm_type == "normalize":
+            self._set_min_max_stats(image_stats, target_stats)
+        elif self.norm_type == "standardize":
+            self._set_mean_std_stats(image_stats, target_stats) 
 
     def _prepare_patches(self, supervised: bool) -> PatchedOutput:
         """

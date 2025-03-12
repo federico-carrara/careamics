@@ -25,6 +25,12 @@ class Stats:
 
     stds: Union[NDArray, tuple, list, None]
     """Standard deviation of the data across channels."""
+    
+    mins: Union[NDArray, tuple, list, None]
+    """Minimum values of the data across channels."""
+    
+    maxs: Union[NDArray, tuple, list, None]
+    """Maximum values of the data across channels."""
 
     def get_statistics(self) -> tuple[list[float], list[float]]:
         """Return the means and standard deviations.
