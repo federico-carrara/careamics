@@ -125,8 +125,8 @@ class InMemoryDataset(Dataset):
         if self.data_config.image_mins is None:
             self.image_stats = image_stats
             logger.info(
-                f"Computed dataset mean: {self.image_stats.means}, "
-                f"std: {self.image_stats.stds}"
+                f"Computed dataset min: {self.image_stats.mins}, "
+                f"max: {self.image_stats.maxs}"
             )
         else:
             self.image_stats = Stats(

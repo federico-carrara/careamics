@@ -234,8 +234,8 @@ class PathIterableDataset(IterableDataset):
         if self.data_config.image_mins is None:
             self.image_stats, self.target_stats = self._calculate_min_and_max()
             logger.info(
-                f"Computed dataset mean: {self.image_stats.means},"
-                f"std: {self.image_stats.stds}"
+                f"Computed dataset min: {self.image_stats.mins},"
+                f"max: {self.image_stats.maxs}"
             )
 
             # update min and maxs in configuration
