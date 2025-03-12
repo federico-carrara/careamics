@@ -152,9 +152,22 @@ class DataConfig(BaseModel):
     """Quantile range for min-max normalization. If a single value is provided, the
     range will be [min_quantile, 1 - min_quantile]."""
 
-    transforms: list[TRANSFORMS_UNION] = Field(default_factory=list)
+    transforms: list[TRANSFORMS_UNION] = Field(
+        default=[
+            {
+                "name": SupportedTransform.XY_FLIP.value,
+            },
+            {
+                "name": SupportedTransform.XY_RANDOM_ROTATE90.value,
+            },
+            {
+                "name": SupportedTransform.N2V_MANIPULATE.value,
+            },
+        ],
+        validate_default=True,
+    )
     """List of transformations to apply to the data, available transforms are defined
-    in SupportedTransform."""
+    in SupportedTransform. The default values are set for Noise2Void."""
 
     dataloader_params: Optional[dict] = Field(default=None, exclude=True)
     """Dictionary of PyTorch dataloader parameters."""
