@@ -13,6 +13,9 @@ def _compute_min_max_stats(
 ) -> tuple[NDArray, NDArray]:
     """
     Compute min and max of an array.
+    
+    For robustness, the min and max values are taken as the 1% and 99% percentiles
+    of the intensity values in the data.
 
     Parameters
     ----------
@@ -30,14 +33,14 @@ def _compute_min_max_stats(
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.min(data, axis=axes), # (C,)
-            np.max(data, axis=axes) # (C,)
+            np.quantile(data, 0.01, axis=axes), # (C,)
+            np.quantile(data, 0.99, axis=axes) # (C,)
         )
     elif strategy == "global":
         axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.min(data, axis=axes))[None], # (1,) 
-            np.asarray(np.max(data, axis=axes))[None] # (1,)
+            np.asarray(np.quantile(data, 0.01, axis=axes))[None], # (1,) 
+            np.asarray(np.quantile(data, 0.99, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -244,7 +247,13 @@ class WelfordStatistics:
 
 
 class RunningMinMaxStatistics:
-    """Compute running min and max statistics."""
+    """Compute running min and max statistics.
+    
+    Min and max statistics are computed iteratively and updated for each input array.
+    
+    For robustness, the min and max values are taken as the 1% and 99% percentiles
+    of the intensity values in the data.
+    """
     
     def __init__(self) -> None:
         self.mins = None
@@ -261,11 +270,15 @@ class RunningMinMaxStatistics:
         # TODO: use quantiles!
         axes = tuple(np.delete(np.arange(array.ndim), 1))
         if self.mins is None:
-            self.mins = np.min(array, axis=axes) # (C,)
-            self.maxs = np.max(array, axis=axes) # (C,)
+            self.mins = np.quantile(array, 0.01, axis=axes) # (C,)
+            self.maxs = np.quantile(array, 0.99, axis=axes) # (C,)
         else:
-            self.mins = np.minimum(self.mins, np.min(array, axis=axes)) # (C,)
-            self.maxs = np.maximum(self.maxs, np.max(array, axis=axes)) # (C,)
+            self.mins = np.minimum(
+                self.mins, np.quantile(array, 0.01, axis=axes)
+            ) # (C,)
+            self.maxs = np.maximum(
+                self.maxs, np.quantile(array, 0.99, axis=axes)
+            ) # (C,)
 
 
 # from multiprocessing import Value
