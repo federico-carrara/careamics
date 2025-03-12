@@ -13,7 +13,7 @@ from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
 from ..config import DataConfig
-from ..config.transformations import NormalizeModel
+from ..config.transformations import NormalizeModel, StandardizeModel
 from ..utils.logging import get_logger
 from .patching.patching import (
     PatchedOutput,
@@ -100,18 +100,24 @@ class InMemoryDataset(Dataset):
         # set image statistics
         self._set_image_stats(patches_data.image_stats, patches_data.target_stats)
 
-        # get transforms
+        # create transform composed of normalization and other transforms
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_stats.mins,
+                image_maxs=self.image_stats.maxs,
+                target_mins=self.target_stats.mins,
+                target_maxs=self.target_stats.maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_stats.means,
+                image_stds=self.image_stats.stds,
+                target_means=self.target_stats.means,
+                target_stds=self.target_stats.stds,
+            )
+            
         self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(
-                    strategy=self.norm_strategy,
-                    image_means=self.image_stats.means,
-                    image_stds=self.image_stats.stds,
-                    target_means=self.target_stats.means,
-                    target_stds=self.target_stats.stds,
-                )
-            ]
-            + self.data_config.transforms,
+            transform_list=[norm_transform] + data_config.transforms
         )
     
     def _set_min_max_stats(self, image_stats: Stats, target_stats: Stats) -> None:

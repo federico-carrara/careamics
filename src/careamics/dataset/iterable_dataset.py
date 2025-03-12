@@ -12,7 +12,7 @@ from tqdm import tqdm
 from torch.utils.data import IterableDataset
 
 from careamics.config import DataConfig
-from careamics.config.transformations import NormalizeModel
+from careamics.config.transformations import NormalizeModel, StandardizeModel
 from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
@@ -82,22 +82,28 @@ class PathIterableDataset(IterableDataset):
         # FIXME: `norm_strategy` not defined here...
 
         # compute mean and std over the dataset
-        
+        self._set_image_stats()
 
-        # FIXME
         # create transform composed of normalization and other transforms
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_stats.mins,
+                image_maxs=self.image_stats.maxs,
+                target_mins=self.target_stats.mins,
+                target_maxs=self.target_stats.maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_stats.means,
+                image_stds=self.image_stats.stds,
+                target_means=self.target_stats.means,
+                target_stds=self.target_stats.stds,
+            )
+            
         self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(
-                    image_means=self.image_stats.means,
-                    image_stds=self.image_stats.stds,
-                    target_means=self.target_stats.means,
-                    target_stds=self.target_stats.stds,
-                )
-            ]
-            + data_config.transforms
+            transform_list=[norm_transform] + data_config.transforms
         )
-
+    
     def _calculate_mean_and_std(self) -> tuple[Stats, Stats]:
         """Calculate channel-wise mean and std of the dataset.
 
@@ -253,12 +259,12 @@ class PathIterableDataset(IterableDataset):
                 ),
             )
     
-    def _set_image_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+    def _set_image_stats(self) -> None:
         """Set the image statistics."""
         if self.norm_type == "normalize":
-            self._set_min_max_stats(image_stats, target_stats)
+            self._set_min_max_stats()
         elif self.norm_type == "standardize":
-            self._set_mean_std_stats(image_stats, target_stats) 
+            self._set_mean_std_stats() 
 
     def __iter__(
         self,
