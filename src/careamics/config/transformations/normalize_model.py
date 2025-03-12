@@ -12,7 +12,7 @@ class NormalizeModel(TransformModel):
     """
     Pydantic model used to represent Normalize transformation.
 
-    The Normalize transform is a zero mean and unit variance transformation.
+    The Normalize transform is min-max normalization of the input data.
 
     Attributes
     ----------
@@ -20,15 +20,7 @@ class NormalizeModel(TransformModel):
         Name of the transformation.
     strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
-    image_means : list
-        Mean values used for normalization of input images.
-    image_stds : list
-        Standard deviation values used for normalization of input images.
-    target_means : Optional[list]
-        Mean values used for normalization of target images. Default is None.
-    target_stds : Optional[list]
-        Standard deviation values used for normalization of target images. 
-        Default is None.
+
     """
 
     model_config = ConfigDict(
@@ -36,33 +28,43 @@ class NormalizeModel(TransformModel):
     )
 
     name: Literal["Normalize"] = "Normalize"
+    
     strategy: Literal["channel-wise", "global"] = "channel-wise"
-    image_means: list = Field(..., min_length=0, max_length=32)
-    image_stds: list = Field(..., min_length=0, max_length=32)
-    target_means: Optional[list] = Field(default=None, min_length=0, max_length=32)
-    target_stds: Optional[list] = Field(default=None, min_length=0, max_length=32)
+    """Normalization strategy. Default is "channel-wise"."""
+    
+    image_mins: Optional[list[float]] = Field(default=None, min_length=0)
+    """Minimum values of the data across channels, used for normalization."""
+    
+    image_maxs: Optional[list[float]] = Field(default=None, min_length=0)
+    """Maximum values of the data across channels, used for normalization."""
+    
+    target_mins: Optional[list[float]] = Field(default=None, min_length=0)
+    """Minimum values of the target data across channels, used for normalization."""
+    
+    target_maxs: Optional[list[float]] = Field(default=None, min_length=0)
+    """Maximum values of the target data across channels, used for normalization."""
 
     @model_validator(mode="after")
-    def validate_means_stds(self: Self) -> Self:
-        """Validate that the means and stds have the same length.
+    def validate_mins_maxs(self: Self) -> Self:
+        """Validate that the mins and maxs have the same length.
 
         Returns
         -------
         Self
             The instance of the model.
         """
-        if len(self.image_means) != len(self.image_stds):
-            raise ValueError("The number of image means and stds must be the same.")
+        if len(self.image_mins) != len(self.image_maxs):
+            raise ValueError("The number of image mins and maxs must be the same.")
 
-        if (self.target_means is None) != (self.target_stds is None):
+        if (self.target_mins is None) != (self.target_maxs is None):
             raise ValueError(
-                "Both target means and stds must be provided together, or bot None."
+                "Both target mins and maxs must be provided together, or bot None."
             )
 
-        if self.target_means is not None and self.target_stds is not None:
-            if len(self.target_means) != len(self.target_stds):
+        if self.target_maxs is not None and self.target_mins is not None:
+            if len(self.target_maxs) != len(self.target_mins):
                 raise ValueError(
-                    "The number of target means and stds must be the same."
+                    "The number of target mins and maxs must be the same."
                 )
 
         return self
