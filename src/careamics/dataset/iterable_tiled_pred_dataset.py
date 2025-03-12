@@ -13,7 +13,7 @@ from careamics.transforms import Compose
 
 from ..config import InferenceConfig
 from ..config.tile_information import TileInformation
-from ..config.transformations import NormalizeModel
+from ..config.transformations import NormalizeModel, StandardizeModel
 from .dataset_utils import iterate_over_files
 from .tiling import extract_tiles
 
@@ -89,27 +89,26 @@ class IterableTiledPredDataset(IterableDataset):
         self.tile_overlap = prediction_config.tile_overlap
         self.read_source_func = read_source_func
         self.read_source_kwargs = read_source_kwargs
+        self.norm_type = self.prediction_config.norm_type
+        self.image_means = self.prediction_config.image_means
+        self.image_stds = self.prediction_config.image_stds
+        self.image_mins = self.prediction_config.image_mins
+        self.image_maxs = self.prediction_config.image_maxs
 
-        # check mean and std and create normalize transform
-        if (
-            self.prediction_config.image_means is None
-            or self.prediction_config.image_stds is None
-        ):
-            raise ValueError("Mean and std must be provided for prediction.")
-        else:
-            self.image_means = self.prediction_config.image_means
-            self.image_stds = self.prediction_config.image_stds
-
-            # instantiate normalize transform
-            self.patch_transform = Compose(
-                transform_list=[
-                    NormalizeModel(
-                        image_means=self.image_means,
-                        image_stds=self.image_stds,
-                    )
-                ],
+        # create normalization transform
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_mins,
+                image_maxs=self.image_maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_means,
+                image_stds=self.image_stds
             )
 
+        self.patch_transform = Compose(transform_list=[norm_transform])
+        
     def __iter__(
         self,
     ) -> Generator[tuple[NDArray, TileInformation], None, None]:

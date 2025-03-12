@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
+from typing_extensions import Self
 
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -364,3 +365,17 @@ class InferenceConfig(BaseModel):
             target_mins=target_mins,
             target_maxs=target_maxs,
         )
+        
+    @model_validator(mode="after")
+    def _validate_norm_statistics(self: Self) -> Self:
+        """Validate that normalization statistics are correctly provided."""
+        if self.norm_type == "standardize":
+            if not self.image_means or not self.image_stds:
+                raise ValueError(
+                    "Mean and std must be both provided for standardization."
+                )
+        elif self.norm_type == "normalize":
+            if not self.image_mins or not self.image_maxs:
+                raise ValueError(
+                    "Min and max must be both provided for normalization."
+                )
