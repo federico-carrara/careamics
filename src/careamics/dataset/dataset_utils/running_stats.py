@@ -33,14 +33,14 @@ def _compute_min_max_stats(
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.quantile(data, 0.01, axis=axes), # (C,)
-            np.quantile(data, 0.99, axis=axes) # (C,)
+            np.quantile(data, 0.005, axis=axes), # (C,)
+            np.quantile(data, 0.995, axis=axes) # (C,)
         )
     elif strategy == "global":
         axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.quantile(data, 0.01, axis=axes))[None], # (1,) 
-            np.asarray(np.quantile(data, 0.99, axis=axes))[None] # (1,)
+            np.asarray(np.quantile(data, 0.005, axis=axes))[None], # (1,) 
+            np.asarray(np.quantile(data, 0.995, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -267,17 +267,17 @@ class RunningMinMaxStatistics:
         array : NDArray
             Input array of shape (S, C, (Z), Y, X).
         """
-        # TODO: use quantiles!
+        # TODO: make quantiles as a parameter!
         axes = tuple(np.delete(np.arange(array.ndim), 1))
         if self.mins is None:
-            self.mins = np.quantile(array, 0.01, axis=axes) # (C,)
-            self.maxs = np.quantile(array, 0.99, axis=axes) # (C,)
+            self.mins = np.quantile(array, 0.005, axis=axes) # (C,)
+            self.maxs = np.quantile(array, 0.995, axis=axes) # (C,)
         else:
             self.mins = np.minimum(
-                self.mins, np.quantile(array, 0.01, axis=axes)
+                self.mins, np.quantile(array, 0.005, axis=axes)
             ) # (C,)
             self.maxs = np.maximum(
-                self.maxs, np.quantile(array, 0.99, axis=axes)
+                self.maxs, np.quantile(array, 0.995, axis=axes)
             ) # (C,)
 
 
