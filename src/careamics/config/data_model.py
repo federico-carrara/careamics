@@ -105,13 +105,16 @@ class DataConfig(BaseModel):
 
     batch_size: int = Field(default=1, ge=1, validate_default=True)
     """Batch size for training."""
-
-    # Optional fields
+    
+    # --- Statistics for normalization ---
+    norm_type: Literal["normalize", "standardize"] = "standardize"
+    """Normalization type, either min-max normalization or standardization using mean
+    and standard deviation."""
+    
     norm_strategy: Optional[Literal["channel-wise", "global"]] = "channel-wise"
     """Normalization strategy, either channel-wise or global. It is particularly
     important in the case of multi-channel data."""
     
-    # TODO: list of floats instead of array for serialization?
     image_means: Optional[list[Float]] = Field(
         default=None, min_length=0, max_length=32
     )
@@ -130,6 +133,18 @@ class DataConfig(BaseModel):
     )
     """Standard deviations of the target data across channels, used for
     normalization."""
+    
+    image_mins: Optional[list[Float]] = Field(default=None, min_length=0)
+    """Minimum values of the data across channels, used for normalization."""
+    
+    image_maxs: Optional[list[Float]] = Field(default=None, min_length=0)
+    """Maximum values of the data across channels, used for normalization."""
+    
+    target_mins: Optional[list[Float]] = Field(default=None, min_length=0)
+    """Minimum values of the target data across channels, used for normalization."""
+    
+    target_maxs: Optional[list[Float]] = Field(default=None, min_length=0)
+    """Maximum values of the target data across channels, used for normalization."""
 
     transforms: list[TRANSFORMS_UNION] = Field(
         default=[
@@ -383,10 +398,10 @@ class DataConfig(BaseModel):
 
     def set_means_and_stds(
         self,
-        image_means: Union[NDArray, tuple, list, None],
-        image_stds: Union[NDArray, tuple, list, None],
-        target_means: Optional[Union[NDArray, tuple, list, None]] = None,
-        target_stds: Optional[Union[NDArray, tuple, list, None]] = None,
+        image_means: Optional[Union[NDArray, tuple, list]],
+        image_stds: Optional[Union[NDArray, tuple, list]],
+        target_means: Optional[Union[NDArray, tuple, list]] = None,
+        target_stds: Optional[Union[NDArray, tuple, list]] = None,
     ) -> None:
         """
         Set mean and standard deviation of the data across channels.
@@ -516,3 +531,88 @@ class DataConfig(BaseModel):
                 f"N2V pixel manipulate transform not found in the transforms "
                 f"({transforms})."
             )
+            
+    @model_validator(mode="after")
+    def min_only_with_max(self: Self) -> Self:
+        """
+        Check that min and max are either both None, or both specified.
+
+        Returns
+        -------
+        Self
+            Validated data model.
+        
+        Raises
+        ------
+        ValueError
+            If min is not None and max is None.
+        """
+        # check that min and max are either both None, or both specified
+        if (self.image_mins and not self.image_maxs) or (
+            self.image_maxs and not self.image_mins
+        ):
+            raise ValueError(
+                "Min and max must be either both None, or both specified."
+            )
+
+        elif (self.image_mins is not None and self.image_maxs is not None) and (
+            len(self.image_mins) != len(self.image_maxs)
+        ):
+            raise ValueError("Min and max must be specified for each input channel.")
+
+        if (self.target_mins and not self.target_maxs) or (
+            self.target_maxs and not self.target_mins
+        ):
+            raise ValueError(
+                "Min and max must be either both None, or both specified "
+            )
+
+        elif self.target_mins is not None and self.target_maxs is not None:
+            if len(self.target_mins) != len(self.target_maxs):
+                raise ValueError(
+                    "Min and max must be either both None, or both specified for each "
+                    "target channel."
+                )
+
+        return self
+            
+    def set_mins_and_maxs(
+        self,
+        image_mins: Union[NDArray, tuple, list, None],
+        image_maxs: Union[NDArray, tuple, list, None],
+        target_mins: Optional[Union[NDArray, tuple, list, None]] = None,
+        target_maxs: Optional[Union[NDArray, tuple, list, None]] = None,
+    ) -> None:
+        """
+        Set min and max values of the data across channels.
+        
+        This method should be used instead setting the fields directly, as it would
+        otherwise trigger a validation error.
+        
+        Parameters
+        ----------
+        image_mins : numpy.ndarray, tuple or list
+            Minimum values for normalization.
+        image_maxs : numpy.ndarray, tuple or list
+            Maximum values for normalization.
+        target_mins : numpy.ndarray, tuple or list, optional
+            Target minimum values for normalization, by default ().
+        target_maxs : numpy.ndarray, tuple or list, optional
+            Target maximum values for normalization, by default ().
+        """
+        # make sure we pass a list
+        if image_mins is not None:
+            image_mins = list(image_mins)
+        if image_maxs is not None:
+            image_maxs = list(image_maxs)
+        if target_mins is not None:
+            target_mins = list(target_mins)
+        if target_maxs is not None:
+            target_maxs = list(target_maxs)
+        
+        self._update(
+            image_mins=image_mins,
+            image_maxs=image_maxs,
+            target_mins=target_mins,
+            target_maxs=target_maxs,
+        )

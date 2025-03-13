@@ -13,7 +13,7 @@ from careamics.file_io.read import read_tiff
 from careamics.transforms import Compose
 
 from ..config import DataConfig
-from ..config.transformations import NormalizeModel
+from ..config.transformations import NormalizeModel, StandardizeModel
 from ..utils.logging import get_logger
 from .patching.patching import (
     PatchedOutput,
@@ -79,6 +79,7 @@ class InMemoryDataset(Dataset):
         self.input_targets = input_target
         self.axes = self.data_config.axes
         self.patch_size = self.data_config.patch_size
+        self.norm_type = self.data_config.norm_type
         self.norm_strategy = self.data_config.norm_strategy
 
         # read function
@@ -95,49 +96,94 @@ class InMemoryDataset(Dataset):
         # unpack the dataclass
         self.data = patches_data.patches
         self.data_targets = patches_data.targets
-
+        
         # set image statistics
+        self._set_image_stats(patches_data.image_stats, patches_data.target_stats)
+
+        # create transform composed of normalization and other transforms
+        if self.norm_type == "normalize":
+            norm_transform = NormalizeModel(
+                image_mins=self.image_stats.mins,
+                image_maxs=self.image_stats.maxs,
+                target_mins=self.target_stats.mins,
+                target_maxs=self.target_stats.maxs,
+            )
+        elif self.norm_type == "standardize":
+            norm_transform = StandardizeModel(
+                image_means=self.image_stats.means,
+                image_stds=self.image_stats.stds,
+                target_means=self.target_stats.means,
+                target_stds=self.target_stats.stds,
+            )
+            
+        self.patch_transform = Compose(
+            transform_list=[norm_transform] + self.data_config.transforms
+        )
+    
+    def _set_min_max_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the min and max image statistics."""
+        if self.data_config.image_mins is None:
+            self.image_stats = image_stats
+            logger.info(
+                f"Computed dataset min: {self.image_stats.mins}, "
+                f"max: {self.image_stats.maxs}"
+            )
+        else:
+            self.image_stats = Stats(
+                mins=self.data_config.image_mins, maxs=self.data_config.image_maxs
+            )
+
+        # set target statistics
+        if self.data_config.target_mins is None:
+            self.target_stats = target_stats
+        else:
+            self.target_stats = Stats(
+                mins=self.data_config.target_mins, maxs=self.data_config.target_maxs
+            )
+
+        # update min and maxs in configuration
+        self.data_config.set_mins_and_maxs(
+            image_mins=self.image_stats.mins,
+            image_maxs=self.image_stats.maxs,
+            target_mins=self.target_stats.mins,
+            target_maxs=self.target_stats.maxs
+        )
+    
+    def _set_mean_std_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the mean and std image statistics."""
         if self.data_config.image_means is None:
-            self.image_stats = patches_data.image_stats
+            self.image_stats = image_stats
             logger.info(
                 f"Computed dataset mean: {self.image_stats.means}, "
                 f"std: {self.image_stats.stds}"
             )
         else:
             self.image_stats = Stats(
-                self.data_config.image_means, self.data_config.image_stds
+                means=self.data_config.image_means, stds=self.data_config.image_stds
             )
 
         # set target statistics
         if self.data_config.target_means is None:
-            self.target_stats = patches_data.target_stats
+            self.target_stats = target_stats
         else:
             self.target_stats = Stats(
-                self.data_config.target_means, self.data_config.target_stds
+                means=self.data_config.target_means, stds=self.data_config.target_stds
             )
 
         # update mean and std in configuration
-        # the object is mutable and should then be recorded in the CAREamist obj
         self.data_config.set_means_and_stds(
             image_means=self.image_stats.means,
             image_stds=self.image_stats.stds,
             target_means=self.target_stats.means,
             target_stds=self.target_stats.stds,
         )
-        # get transforms
-        self.patch_transform = Compose(
-            transform_list=[
-                NormalizeModel(
-                    strategy=self.norm_strategy,
-                    image_means=self.image_stats.means,
-                    image_stds=self.image_stats.stds,
-                    target_means=self.target_stats.means,
-                    target_stds=self.target_stats.stds,
-                    
-                )
-            ]
-            + self.data_config.transforms,
-        )
+    
+    def _set_image_stats(self, image_stats: Stats, target_stats: Stats) -> None:
+        """Set the image statistics."""
+        if self.norm_type == "normalize":
+            self._set_min_max_stats(image_stats, target_stats)
+        elif self.norm_type == "standardize":
+            self._set_mean_std_stats(image_stats, target_stats) 
 
     def _prepare_patches(self, supervised: bool) -> PatchedOutput:
         """
@@ -158,22 +204,23 @@ class InMemoryDataset(Dataset):
                 self.input_targets, np.ndarray
             ):
                 return prepare_patches_supervised_array(
-                    self.inputs,
-                    self.axes,
-                    self.input_targets,
-                    self.patch_size,
-                    self.norm_strategy,
+                    data=self.inputs,
+                    axes=self.axes,
+                    data_target=self.input_targets,
+                    patch_size=self.patch_size,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             elif isinstance(self.inputs, list) and isinstance(self.input_targets, list):
                 return prepare_patches_supervised(
-                    self.inputs,
-                    self.input_targets,
-                    self.axes,
-                    self.patch_size,
-                    self.norm_strategy,
-                    self.read_source_func,
-                    self.read_source_kwargs,
-                    self.norm_strategy,
+                    train_files=self.inputs,
+                    target_files=self.input_targets,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    read_source_func=self.read_source_func,
+                    read_source_kwargs=self.read_source_kwargs,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             else:
                 raise ValueError(
@@ -184,19 +231,21 @@ class InMemoryDataset(Dataset):
         else:
             if isinstance(self.inputs, np.ndarray):
                 return prepare_patches_unsupervised_array(
-                    self.inputs,
-                    self.axes,
-                    self.patch_size,
-                    self.norm_strategy,
+                    data=self.inputs,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
             else:
                 return prepare_patches_unsupervised(
-                    self.inputs,
-                    self.axes,
-                    self.patch_size,
-                    self.read_source_func,
-                    self.read_source_kwargs,
-                    self.norm_strategy,
+                    train_files=self.inputs,
+                    axes=self.axes,
+                    patch_size=self.patch_size,
+                    read_source_func=self.read_source_func,
+                    read_source_kwargs=self.read_source_kwargs,
+                    norm_type=self.norm_type,
+                    norm_strategy=self.norm_strategy,
                 )
 
     def __len__(self) -> int:

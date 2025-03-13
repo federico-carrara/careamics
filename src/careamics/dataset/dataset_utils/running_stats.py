@@ -4,42 +4,43 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from .dataset_utils import Stats
 
-def compute_normalization_stats(
-    image: NDArray, 
+
+def _compute_min_max_stats(
+    data: NDArray, 
     strategy: Literal["channel-wise", "global"] = "channel-wise"
 ) -> tuple[NDArray, NDArray]:
     """
-    Compute mean and standard deviation of an array.
-
-    Expected input shape is (S, C, (Z), Y, X). The mean and standard deviation are
-    computed per channel.
+    Compute min and max of an array.
+    
+    For robustness, the min and max values are taken as the 1% and 99% percentiles
+    of the intensity values in the data.
 
     Parameters
     ----------
-    image : NDArray
-        Input array.
+    data : NDArray
+        Input data array. Expected input shape is (S, C, (Z), Y, X).
     norm_strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
 
     Returns
     -------
     tuple of (list of floats, list of floats)
-        Lists of mean and standard deviation values per channel.
+        Lists of min and max values per channel.
     """
-    # TODO: this needs to be fixed a little bit
     if strategy == "channel-wise":
         # Define the list of axes excluding the channel axis
-        axes = tuple(np.delete(np.arange(image.ndim), 1))
+        axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.mean(image, axis=axes), # (C,)
-            np.std(image, axis=axes) # (C,)
+            np.quantile(data, 0.005, axis=axes), # (C,)
+            np.quantile(data, 0.995, axis=axes) # (C,)
         )
     elif strategy == "global":
-        axes = tuple(np.arange(image.ndim))
+        axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.mean(image, axis=axes))[None], # (1,) 
-            np.asarray(np.std(image, axis=axes))[None] # (1,)
+            np.asarray(np.quantile(data, 0.005, axis=axes))[None], # (1,) 
+            np.asarray(np.quantile(data, 0.995, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -49,6 +50,84 @@ def compute_normalization_stats(
             )
         )
     return stats
+
+
+def _compute_mean_std_stats(
+    data: NDArray, 
+    strategy: Literal["channel-wise", "global"] = "channel-wise"
+) -> tuple[NDArray, NDArray]:
+    """
+    Compute mean and standard deviation of an array.
+
+    Parameters
+    ----------
+    data : NDArray
+        Input data array. Expected input shape is (S, C, (Z), Y, X)
+    norm_strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
+
+    Returns
+    -------
+    tuple of (list of floats, list of floats)
+        Lists of mean and standard deviation values per channel.
+    """
+    if strategy == "channel-wise":
+        # Define the list of axes excluding the channel axis
+        axes = tuple(np.delete(np.arange(data.ndim), 1))
+        stats = (
+            np.mean(data, axis=axes), # (C,)
+            np.std(data, axis=axes) # (C,)
+        )
+    elif strategy == "global":
+        axes = tuple(np.arange(data.ndim))
+        stats = (
+            np.asarray(np.mean(data, axis=axes))[None], # (1,)
+            np.asarray(np.std(data, axis=axes))[None] # (1,)
+        )
+    else:
+        raise ValueError(
+            (
+                f"Unknown normalization strategy: {strategy}."
+                "Available ones are 'channel-wise' and 'global'."
+            )
+        )
+    return stats
+
+
+def compute_normalization_stats(
+    data: NDArray,
+    method: Literal["normalize", "standardize"],
+    strategy: Literal["channel-wise", "global"] = "channel-wise",
+) -> Stats:
+    """Compute normalization statistics on the input array.
+    
+    Parameters
+    ----------
+    image : NDArray
+        Input array. Expected input shape is (S, C, (Z), Y, X).
+    norm_type : Literal["normalize", "standardize"]
+        Normalization type.
+    strategy : Literal["channel-wise", "global"]
+        Normalization strategy. Default is "channel-wise".
+        
+    Returns
+    -------
+    Stats
+        Normalization statistics.
+    """
+    stats = {"means": None, "stds": None, "mins": None, "maxs": None}
+    if method == "normalize":
+        stats["mins"], stats["maxs"] = _compute_min_max_stats(data, strategy)
+    elif method == "standardize":
+        stats["means"], stats["stds"] = _compute_mean_std_stats(data, strategy)
+    else:
+        raise ValueError(
+            (
+                f"Unknown normalization type: {method}."
+                "Available ones are 'normalize' and 'standardize'."
+            )
+        )
+    return Stats(**stats)
 
 
 def update_iterative_stats(
@@ -165,6 +244,41 @@ class WelfordStatistics:
             Final mean and standard deviation.
         """
         return finalize_iterative_stats(self.count, self.mean, self.m2)
+
+
+class RunningMinMaxStatistics:
+    """Compute running min and max statistics.
+    
+    Min and max statistics are computed iteratively and updated for each input array.
+    
+    For robustness, the min and max values are taken as the 1% and 99% percentiles
+    of the intensity values in the data.
+    """
+    
+    def __init__(self) -> None:
+        self.mins = None
+        self.maxs = None
+    
+    def update(self, array: NDArray) -> None:
+        """Update the running min and max statistics.
+        
+        Parameters
+        ----------
+        array : NDArray
+            Input array of shape (S, C, (Z), Y, X).
+        """
+        # TODO: make quantiles as a parameter!
+        axes = tuple(np.delete(np.arange(array.ndim), 1))
+        if self.mins is None:
+            self.mins = np.quantile(array, 0.005, axis=axes) # (C,)
+            self.maxs = np.quantile(array, 0.995, axis=axes) # (C,)
+        else:
+            self.mins = np.minimum(
+                self.mins, np.quantile(array, 0.005, axis=axes)
+            ) # (C,)
+            self.maxs = np.maximum(
+                self.maxs, np.quantile(array, 0.995, axis=axes)
+            ) # (C,)
 
 
 # from multiprocessing import Value
