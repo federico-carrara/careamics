@@ -9,7 +9,7 @@ from typing import Literal, Optional
 import numpy as np
 import torch
 from torch import Tensor
-
+from torchmetrics.image import StructuralSimilarityIndexMeasure as SSIM
 
 # TODO: refactoring: code is highly duplicated and redundant. Create a class?
 def _gaussian_kernel_binning(x: Tensor, centers: Tensor,sigma: float) -> Tensor:
@@ -226,8 +226,8 @@ def pairwise_mutual_information(
     inputs: Tensor,
     num_bins: int,
     method: Literal["gaussian", "sigmoid"],
-    gaussian_sigma: Optional[float] = 0.5,
-    sigmoid_scale: Optional[float] = 10.0,
+    gaussian_sigma: Optional[float] = 0.1,
+    sigmoid_scale: Optional[float] = 1000.0,
     epsilon: float = 1e-10   
 ) -> Tensor:
     """Calculate the (differentiable) pairwise mutual information between input
@@ -243,10 +243,10 @@ def pairwise_mutual_information(
         The method to compute the soft histogram.
     gaussian_sigma: float, optional
         The standard deviation of the Gaussian kernel. A value in (0, 1] is
-        recommended to get sharp binning functions. Default is 0.5.
+        recommended to get sharp binning functions. Default is 0.1.
     sigmoid_scale: float, optional
-        The scaling factor of the sigmoid kernel. A value greater than 10 is
-        recommended to get sharp binning functions. Default is 10.0.
+        The scaling factor of the sigmoid kernel. A value greater than 100 is
+        recommended to get sharp binning functions. Default is 1000.0.
     epsilon: float, optional
         A small value to avoid numerical instability. Default is 1e-10.
         
@@ -300,12 +300,12 @@ def pairwise_mutual_information(
 
 def mosaic_pairwise_mutual_information(
     inputs: Tensor,
-    ssim_percentile: float,
     num_bins: int,
     method: Literal["gaussian", "sigmoid"],
-    gaussian_sigma: Optional[float] = 0.5,
-    sigmoid_scale: Optional[float] = 10.0,
-    epsilon: float = 1e-10
+    gaussian_sigma: Optional[float] = 0.1,
+    sigmoid_scale: Optional[float] = 1000.0,
+    epsilon: float = 1e-10,
+    ssim_percentile: float = 0.1,
 ) -> Tensor:
     """Calculate the (differentiable) pairwise mutual information between input
     channels using the MOSAIC approach, i.e., only computing it for the patches in the
@@ -314,13 +314,62 @@ def mosaic_pairwise_mutual_information(
     This approach is useful to focus on the most informative patches for the mutual
     information computation and leave out meaningless patches (e.g., background).
     
-    Percentiles are calculated over the SSIM values for a batch and different channels
-    pairs are treated separately.
+    Percentiles are calculated separately for each channel pair as different channels
+    pairs can exhibit different SSIM ranges.
     
     Parameters
     ----------
+    inputs: Tensor
+        Input tensor with shape (B, C, Z, Y, X).
+    num_bins: int
+        The number of bins to use for the histogram.
+    method: Literal["gaussian", "sigmoid"]
+        The method to compute the soft histogram.
+    gaussian_sigma: float, optional
+        The standard deviation of the Gaussian kernel. A value in (0, 1] is
+        recommended to get sharp binning functions. Default is 0.1.
+    sigmoid_scale: float, optional
+        The scaling factor of the sigmoid kernel. A value greater than 100 is
+        recommended to get sharp binning functions. Default is 1000.0.
+    epsilon: float, optional
+        A small value to avoid numerical instability. Default is 1e-10.
+    ssim_percentile: float, optional
+        The percentile below which to consider patches for the mutual information
+        computation. Default is 0.1.
+        
+    Returns
+    -------
+    Tensor
+        The pairwise mutual information between input channels over the more dissimilar
+        items in the batch. Dissimilarity is estimated through the SSIM values.
+        Hence, the output tensor has shape (B', C * (C - 1) / 2), where B' is the number
+        of patches below the SSIM percentile.
     """
-    pass
+    # TODO: optimize by avoiding redundant calculations
+    # e.g., Calculate MI only for selected patches, not for all
+    
+    # Calculate SSIM values for all channel pairs
+    ssim = SSIM(reduction="none") # FIXME: avoid creating a new instance at every function call
+    ssim_values = []
+    for i in range(inputs.shape[1]):
+        for j in range(i + 1, inputs.shape[1]):
+            ssim_values.append(ssim(inputs[:, i:i+1], inputs[:, j:j+1]))
+    ssim_values = torch.stack(ssim_values, dim=1) # shape: (B, C * (C - 1) / 2)
+    low_ssim_mask = ssim_values <= torch.quantile(ssim_values, ssim_percentile, dim=0)
+    
+    # Calculate the pairwise mutual information for the patches below the percentile
+    mi_values = pairwise_mutual_information(
+        inputs,
+        num_bins,
+        method,
+        gaussian_sigma,
+        sigmoid_scale,
+        epsilon
+    )
+    
+    # Apply the mask to the mutual information values
+    num_pairs = inputs.shape[1]
+    return mi_values[low_ssim_mask].reshape(-1, num_pairs)
 
 # -------------------------------------------------------------------------------------
 # Additional functions not used in the current implementation
