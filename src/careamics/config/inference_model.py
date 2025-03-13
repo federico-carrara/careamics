@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
+from typing_extensions import Self
 
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -31,12 +32,22 @@ class InferenceConfig(BaseModel):
 
     axes: str
     """Data axes (TSCZYX) in the order of the input data."""
+    
+    norm_type: Literal["normalize", "standardize"] = "standardize"
+    """Normalization type, either min-max normalization or standardization using mean
+    and standard deviation."""
 
-    image_means: Optional[list] = Field(..., min_length=0, max_length=32)
+    image_means: Optional[list] = Field(None, min_length=0, max_length=32)
     """Mean values for each input channel."""
 
-    image_stds: Optional[list] = Field(..., min_length=0, max_length=32)
+    image_stds: Optional[list] = Field(None, min_length=0, max_length=32)
     """Standard deviation values for each input channel."""
+    
+    image_mins: Optional[list] = Field(None, min_length=0)
+    """Minimum values for each input channel."""
+    
+    image_maxs: Optional[list] = Field(None, min_length=0)
+    """Maximum values for each input channel."""
 
     # TODO only default TTAs are supported for now
     tta_transforms: bool = Field(default=True)
@@ -196,23 +207,24 @@ class InferenceConfig(BaseModel):
         ValueError
             If std is not None and mean is None.
         """
-        # check that mean and std are either both None, or both specified
-        if not self.image_means and not self.image_stds:
-            raise ValueError("Mean and std must be specified during inference.")
+        if self.norm_type == "standardize":
+            # check that mean and std are either both None, or both specified
+            if not self.image_means and not self.image_stds:
+                raise ValueError("Mean and std must be specified during inference.")
 
-        if (self.image_means and not self.image_stds) or (
-            self.image_stds and not self.image_means
-        ):
-            raise ValueError(
-                "Mean and std must be either both None, or both specified."
-            )
+            if (self.image_means and not self.image_stds) or (
+                self.image_stds and not self.image_means
+            ):
+                raise ValueError(
+                    "Mean and std must be either both None, or both specified."
+                )
 
-        elif (self.image_means is not None and self.image_stds is not None) and (
-            len(self.image_means) != len(self.image_stds)
-        ):
-            raise ValueError(
-                "Mean and std must be specified for each " "input channel."
-            )
+            elif (self.image_means is not None and self.image_stds is not None) and (
+                len(self.image_means) != len(self.image_stds)
+            ):
+                raise ValueError(
+                    "Mean and std must be specified for each " "input channel."
+                )
 
         return self
 
@@ -245,10 +257,10 @@ class InferenceConfig(BaseModel):
         
     def set_means_and_stds(
         self,
-        image_means: Union[NDArray, tuple, list, None],
-        image_stds: Union[NDArray, tuple, list, None],
-        target_means: Optional[Union[NDArray, tuple, list, None]] = None,
-        target_stds: Optional[Union[NDArray, tuple, list, None]] = None,
+        image_means: Optional[Union[NDArray, tuple, list]],
+        image_stds: Optional[Union[NDArray, tuple, list]],
+        target_means: Optional[Union[NDArray, tuple, list]] = None,
+        target_stds: Optional[Union[NDArray, tuple, list]] = None,
     ) -> None:
         """
         Set mean and standard deviation of the data across channels.
@@ -283,3 +295,93 @@ class InferenceConfig(BaseModel):
             target_means=target_means,
             target_stds=target_stds,
         )
+    
+    @model_validator(mode="after")
+    def min_only_with_max(self: Self) -> Self:
+        """
+        Check that min and max are either both None, or both specified.
+
+        Returns
+        -------
+        Self
+            Validated data model.
+        
+        Raises
+        ------
+        ValueError
+            If min is not None and max is None.
+        """
+        if self.norm_type == "normalize":
+            # check that mean and std are either both None, or both specified
+            if not self.image_mins and not self.image_maxs:
+                raise ValueError("Min and max must be specified during inference.")
+            
+            # check that min and max are either both None, or both specified
+            if (self.image_mins and not self.image_maxs) or (
+                self.image_maxs and not self.image_mins
+            ):
+                raise ValueError(
+                    "Min and max must be either both None, or both specified."
+                )
+
+            elif (self.image_mins is not None and self.image_maxs is not None) and (
+                len(self.image_mins) != len(self.image_maxs)
+            ):
+                raise ValueError("Min and max must be specified for each input channel.")
+
+        return self
+            
+    def set_mins_and_maxs(
+        self,
+        image_mins: Union[NDArray, tuple, list, None],
+        image_maxs: Union[NDArray, tuple, list, None],
+        target_mins: Optional[Union[NDArray, tuple, list, None]] = None,
+        target_maxs: Optional[Union[NDArray, tuple, list, None]] = None,
+    ) -> None:
+        """
+        Set min and max values of the data across channels.
+        
+        This method should be used instead setting the fields directly, as it would
+        otherwise trigger a validation error.
+        
+        Parameters
+        ----------
+        image_mins : numpy.ndarray, tuple or list
+            Minimum values for normalization.
+        image_maxs : numpy.ndarray, tuple or list
+            Maximum values for normalization.
+        target_mins : numpy.ndarray, tuple or list, optional
+            Target minimum values for normalization, by default ().
+        target_maxs : numpy.ndarray, tuple or list, optional
+            Target maximum values for normalization, by default ().
+        """
+        # make sure we pass a list
+        if image_mins is not None:
+            image_mins = list(image_mins)
+        if image_maxs is not None:
+            image_maxs = list(image_maxs)
+        if target_mins is not None:
+            target_mins = list(target_mins)
+        if target_maxs is not None:
+            target_maxs = list(target_maxs)
+        
+        self._update(
+            image_mins=image_mins,
+            image_maxs=image_maxs,
+            target_mins=target_mins,
+            target_maxs=target_maxs,
+        )
+        
+    @model_validator(mode="after")
+    def _validate_norm_statistics(self: Self) -> Self:
+        """Validate that normalization statistics are correctly provided."""
+        if self.norm_type == "standardize":
+            if not self.image_means or not self.image_stds:
+                raise ValueError(
+                    "Mean and std must be both provided for standardization."
+                )
+        elif self.norm_type == "normalize":
+            if not self.image_mins or not self.image_maxs:
+                raise ValueError(
+                    "Min and max must be both provided for normalization."
+                )

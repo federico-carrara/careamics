@@ -85,7 +85,7 @@ class LVAELossConfig(BaseModel):
     """Weight for the denoiSplit loss (used in the muSplit-deonoiSplit loss)."""
     kl_params: KLLossConfig = KLLossConfig()
     """KL loss configuration."""
-    mutual_info_weight: float = 1.0
+    mutual_info_weight: float = 0.0
     """Weight for the mutual information loss."""
     mutual_info_params: MutualInfoLossConfig = MutualInfoLossConfig()
     """Mutual information loss configuration."""
