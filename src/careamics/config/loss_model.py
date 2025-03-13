@@ -36,6 +36,8 @@ class MutualInfoLossConfig(BaseModel):
     loss_type: Literal["hist", "MINE"] = "hist"
     """Type of mutual information implementation, either using histograms to estimate
     joint and marginal distributions of input data or using MINE algorithm."""
+    mosaic: bool = False
+    """Whether to use the MOSAIC variant of the mutual information loss."""
     num_bins: int = 20
     """Number of bins for the histogram approximating input distribution. A good rule
     of thumb is to set the number of bins approximately equal to 1/3 of the square root

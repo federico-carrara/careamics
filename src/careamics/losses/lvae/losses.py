@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import torch
 
-from careamics.losses.mutual_info import pairwise_mutual_information
 from careamics.losses.lvae.loss_utils import free_bits_kl, get_kl_weight
+from careamics.losses.mutual_info import (
+    pairwise_mutual_information, mosaic_pairwise_mutual_information
+)
+
 from careamics.models.lvae.likelihoods import (
     GaussianLikelihood,
     LikelihoodModule,
@@ -286,6 +289,7 @@ def _get_kl_divergence_loss_denoisplit(
 def get_mutual_info_loss(
     inputs: torch.Tensor,
     mi_loss_type: Literal["hist", "MINE"],
+    mosaic: bool,
     num_bins: int,
     binning_method: Literal["gaussian", "sigmoid"],
     gaussian_sigma: float,
@@ -306,6 +310,8 @@ def get_mutual_info_loss(
     mi_loss_type : Literal["hist", "MINE"]
         The type of mutual information implementation, either using histograms to
         estimate joint and marginal distributions of input data or using MINE algorithm.
+    mosaic : bool
+        Whether to use the MOSAIC variant of the mutual information loss.
     num_bins : int
         The number of bins for the histogram approximating input distribution. A good
         rule of thumb is to set the number of bins approximately equal to 1/3 of the
@@ -330,7 +336,11 @@ def get_mutual_info_loss(
         The mutual information loss. Shape is (C * (C-1) / 2).
     """
     if mi_loss_type == "hist":
-        mutual_info = pairwise_mutual_information(
+        mutual_info_func = (
+            mosaic_pairwise_mutual_information
+            if mosaic else pairwise_mutual_information
+        )
+        mutual_info = mutual_info_func(
             inputs=inputs,
             num_bins=num_bins,
             method=binning_method,
