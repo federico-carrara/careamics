@@ -207,23 +207,24 @@ class InferenceConfig(BaseModel):
         ValueError
             If std is not None and mean is None.
         """
-        # check that mean and std are either both None, or both specified
-        if not self.image_means and not self.image_stds:
-            raise ValueError("Mean and std must be specified during inference.")
+        if self.norm_type == "standardize":
+            # check that mean and std are either both None, or both specified
+            if not self.image_means and not self.image_stds:
+                raise ValueError("Mean and std must be specified during inference.")
 
-        if (self.image_means and not self.image_stds) or (
-            self.image_stds and not self.image_means
-        ):
-            raise ValueError(
-                "Mean and std must be either both None, or both specified."
-            )
+            if (self.image_means and not self.image_stds) or (
+                self.image_stds and not self.image_means
+            ):
+                raise ValueError(
+                    "Mean and std must be either both None, or both specified."
+                )
 
-        elif (self.image_means is not None and self.image_stds is not None) and (
-            len(self.image_means) != len(self.image_stds)
-        ):
-            raise ValueError(
-                "Mean and std must be specified for each " "input channel."
-            )
+            elif (self.image_means is not None and self.image_stds is not None) and (
+                len(self.image_means) != len(self.image_stds)
+            ):
+                raise ValueError(
+                    "Mean and std must be specified for each " "input channel."
+                )
 
         return self
 
@@ -310,18 +311,23 @@ class InferenceConfig(BaseModel):
         ValueError
             If min is not None and max is None.
         """
-        # check that min and max are either both None, or both specified
-        if (self.image_mins and not self.image_maxs) or (
-            self.image_maxs and not self.image_mins
-        ):
-            raise ValueError(
-                "Min and max must be either both None, or both specified."
-            )
+        if self.norm_type == "normalize":
+            # check that mean and std are either both None, or both specified
+            if not self.image_mins and not self.image_maxs:
+                raise ValueError("Min and max must be specified during inference.")
+            
+            # check that min and max are either both None, or both specified
+            if (self.image_mins and not self.image_maxs) or (
+                self.image_maxs and not self.image_mins
+            ):
+                raise ValueError(
+                    "Min and max must be either both None, or both specified."
+                )
 
-        elif (self.image_mins is not None and self.image_maxs is not None) and (
-            len(self.image_mins) != len(self.image_maxs)
-        ):
-            raise ValueError("Min and max must be specified for each input channel.")
+            elif (self.image_mins is not None and self.image_maxs is not None) and (
+                len(self.image_mins) != len(self.image_maxs)
+            ):
+                raise ValueError("Min and max must be specified for each input channel.")
 
         return self
             
