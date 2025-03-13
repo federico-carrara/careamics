@@ -130,7 +130,7 @@ class InMemoryDataset(Dataset):
             )
         else:
             self.image_stats = Stats(
-                self.data_config.image_mins, self.data_config.image_maxs
+                mins=self.data_config.image_mins, maxs=self.data_config.image_maxs
             )
 
         # set target statistics
@@ -138,15 +138,15 @@ class InMemoryDataset(Dataset):
             self.target_stats = target_stats
         else:
             self.target_stats = Stats(
-                self.data_config.target_mins, self.data_config.target_maxs
+                mins=self.data_config.target_mins, maxs=self.data_config.target_maxs
             )
 
         # update min and maxs in configuration
         self.data_config.set_mins_and_maxs(
-            image_mins=self.image_stats.means,
-            image_maxs=self.image_stats.stds,
-            target_mins=self.target_stats.means,
-            target_maxs=self.target_stats
+            image_mins=self.image_stats.mins,
+            image_maxs=self.image_stats.maxs,
+            target_mins=self.target_stats.mins,
+            target_maxs=self.target_stats.maxs
         )
     
     def _set_mean_std_stats(self, image_stats: Stats, target_stats: Stats) -> None:
@@ -159,7 +159,7 @@ class InMemoryDataset(Dataset):
             )
         else:
             self.image_stats = Stats(
-                self.data_config.image_means, self.data_config.image_stds
+                means=self.data_config.image_means, stds=self.data_config.image_stds
             )
 
         # set target statistics
@@ -167,7 +167,7 @@ class InMemoryDataset(Dataset):
             self.target_stats = target_stats
         else:
             self.target_stats = Stats(
-                self.data_config.target_means, self.data_config.target_stds
+                means=self.data_config.target_means, stds=self.data_config.target_stds
             )
 
         # update mean and std in configuration

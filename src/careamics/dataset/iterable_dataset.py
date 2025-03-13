@@ -240,10 +240,10 @@ class PathIterableDataset(IterableDataset):
 
             # update min and maxs in configuration
             self.data_config.set_mins_and_maxs(
-                image_mins=self.image_stats.means,
-                image_maxs=self.image_stats.stds,
-                target_mins=self.target_stats.means,
-                target_maxs=self.target_stats
+                image_mins=self.image_stats.mins,
+                image_maxs=self.image_stats.maxs,
+                target_mins=self.target_stats.mins,
+                target_maxs=self.target_stats.maxs
             )
         
         else:
