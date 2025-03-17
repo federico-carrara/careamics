@@ -120,10 +120,6 @@ class IterableTiledPredDataset(IterableDataset):
         Generator of NDArray and TileInformation tuple
             Generator of single tiles.
         """
-        assert (
-            self.image_means is not None and self.image_stds is not None
-        ), "Mean and std must be provided"
-
         for sample, _, sample_id in iterate_over_files(
             self.prediction_config,
             self.data_files,

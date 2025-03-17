@@ -277,10 +277,6 @@ class PathIterableDataset(IterableDataset):
         np.ndarray
             Single patch.
         """
-        assert (
-            self.image_stats.means is not None and self.image_stats.stds is not None
-        ), "Mean and std must be provided"
-
         # iterate over files
         for sample_input, sample_target, _ in iterate_over_files(
             self.data_config,

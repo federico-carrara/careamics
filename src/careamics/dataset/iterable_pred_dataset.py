@@ -104,10 +104,6 @@ class IterablePredDataset(IterableDataset):
         NDArray
             Single patch.
         """
-        assert (
-            self.image_means is not None and self.image_stds is not None
-        ), "Mean and std must be provided"
-
         for sample, _ in iterate_over_files(
             self.prediction_config,
             self.data_files,
