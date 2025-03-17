@@ -161,9 +161,9 @@ class PathIterableDataset(IterableDataset):
             Data classes containing the image and target statistics.
         """
         num_samples = 0
-        image_stats = RunningMinMaxStatistics()
+        image_stats = RunningMinMaxStatistics(self.data_config.min_max_qtile)
         if self.target_files is not None:
-            target_stats = RunningMinMaxStatistics()
+            target_stats = RunningMinMaxStatistics(self.data_config.min_max_qtile)
 
         for sample, target, _ in tqdm(
             iterate_over_files(

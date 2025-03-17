@@ -145,6 +145,9 @@ class DataConfig(BaseModel):
     
     target_maxs: Optional[list[Float]] = Field(default=None, min_length=0)
     """Maximum values of the target data across channels, used for normalization."""
+    
+    min_max_qtile: Optional[float] = Field(default=0.0, le=0.05)
+    """Quantile value to use for min-max normalization."""
 
     transforms: list[TRANSFORMS_UNION] = Field(
         default=[

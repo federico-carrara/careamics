@@ -9,7 +9,8 @@ from .dataset_utils import Stats
 
 def _compute_min_max_stats(
     data: NDArray, 
-    strategy: Literal["channel-wise", "global"] = "channel-wise"
+    strategy: Literal["channel-wise", "global"] = "channel-wise",
+    min_max_qtile: float = 0.0
 ) -> tuple[NDArray, NDArray]:
     """
     Compute min and max of an array.
@@ -23,6 +24,8 @@ def _compute_min_max_stats(
         Input data array. Expected input shape is (S, C, (Z), Y, X).
     norm_strategy : Literal["channel-wise", "global"]
         Normalization strategy. Default is "channel-wise".
+    min_max_qtile : float
+        Quantile value for min and max computation. Default is 0.0.
 
     Returns
     -------
@@ -33,14 +36,14 @@ def _compute_min_max_stats(
         # Define the list of axes excluding the channel axis
         axes = tuple(np.delete(np.arange(data.ndim), 1))
         stats = (
-            np.quantile(data, 0.005, axis=axes), # (C,)
-            np.quantile(data, 0.995, axis=axes) # (C,)
+            np.quantile(data, min_max_qtile, axis=axes), # (C,)
+            np.quantile(data, 1 - min_max_qtile, axis=axes) # (C,)
         )
     elif strategy == "global":
         axes = tuple(np.arange(data.ndim))
         stats = (
-            np.asarray(np.quantile(data, 0.005, axis=axes))[None], # (1,) 
-            np.asarray(np.quantile(data, 0.995, axis=axes))[None] # (1,)
+            np.asarray(np.quantile(data, min_max_qtile, axis=axes))[None], # (1,) 
+            np.asarray(np.quantile(data, 1 - min_max_qtile, axis=axes))[None] # (1,)
         )
     else:
         raise ValueError(
@@ -98,6 +101,7 @@ def compute_normalization_stats(
     data: NDArray,
     method: Literal["normalize", "standardize"],
     strategy: Literal["channel-wise", "global"] = "channel-wise",
+    **kwargs
 ) -> Stats:
     """Compute normalization statistics on the input array.
     
@@ -117,7 +121,7 @@ def compute_normalization_stats(
     """
     stats = {"means": None, "stds": None, "mins": None, "maxs": None}
     if method == "normalize":
-        stats["mins"], stats["maxs"] = _compute_min_max_stats(data, strategy)
+        stats["mins"], stats["maxs"] = _compute_min_max_stats(data, strategy, **kwargs)
     elif method == "standardize":
         stats["means"], stats["stds"] = _compute_mean_std_stats(data, strategy)
     else:
@@ -219,7 +223,7 @@ class WelfordStatistics:
         # Initialize the statistics
         if self.sample_idx == 0:
             # Compute the mean and standard deviation
-            self.mean, _ = compute_normalization_stats(array)
+            self.mean, _ = compute_normalization_stats(array, "standardize")
             # Initialize the count and m2 with zero-valued arrays of shape (C,)
             self.count, self.mean, self.m2 = update_iterative_stats(
                 count=np.zeros(array.shape[1]),
@@ -255,9 +259,10 @@ class RunningMinMaxStatistics:
     of the intensity values in the data.
     """
     
-    def __init__(self) -> None:
+    def __init__(self, min_max_qtile: float = 0.0) -> None:
         self.mins = None
         self.maxs = None
+        self.min_max_qtile = min_max_qtile
     
     def update(self, array: NDArray) -> None:
         """Update the running min and max statistics.
@@ -270,14 +275,14 @@ class RunningMinMaxStatistics:
         # TODO: make quantiles as a parameter!
         axes = tuple(np.delete(np.arange(array.ndim), 1))
         if self.mins is None:
-            self.mins = np.quantile(array, 0.005, axis=axes) # (C,)
-            self.maxs = np.quantile(array, 0.995, axis=axes) # (C,)
+            self.mins = np.quantile(array, self.min_max_qtile, axis=axes) # (C,)
+            self.maxs = np.quantile(array, 1 - self.min_max_qtile, axis=axes) # (C,)
         else:
             self.mins = np.minimum(
-                self.mins, np.quantile(array, 0.005, axis=axes)
+                self.mins, np.quantile(array, self.min_max_qtile, axis=axes)
             ) # (C,)
             self.maxs = np.maximum(
-                self.maxs, np.quantile(array, 0.995, axis=axes)
+                self.maxs, np.quantile(array, 1 - self.min_max_qtile, axis=axes)
             ) # (C,)
 
 
